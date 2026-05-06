@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>yumin_ai Content Workflow</title>
+    <meta
+      name="description"
+      content="AI-related content publishing and workflow management page for yumin_ai."
+    >
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #19201d;
+        --muted: #5f6f68;
+        --line: #d9e1dd;
+        --bg: #f7faf8;
+        --panel: #ffffff;
+        --accent: #0f8b6f;
+        --accent-soft: #dff3ed;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        color: var(--ink);
+        background: var(--bg);
+        line-height: 1.65;
+      }
+
+      main {
+        width: min(920px, calc(100% - 40px));
+        margin: 0 auto;
+        padding: 56px 0;
+      }
+
+      header {
+        padding-bottom: 32px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .label {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 18px;
+        padding: 5px 10px;
+        border-radius: 999px;
+        color: #0b5f4d;
+        background: var(--accent-soft);
+        font-size: 14px;
+        font-weight: 600;
+      }
+
+      h1 {
+        margin: 0 0 18px;
+        font-size: clamp(34px, 6vw, 64px);
+        line-height: 1.05;
+        letter-spacing: 0;
+      }
+
+      .lead {
+        max-width: 720px;
+        margin: 0;
+        color: var(--muted);
+        font-size: 18px;
+      }
+
+      section {
+        padding: 32px 0 0;
+      }
+
+      h2 {
+        margin: 0 0 14px;
+        font-size: 22px;
+        letter-spacing: 0;
+      }
+
+      p {
+        margin: 0 0 16px;
+      }
+
+      ul {
+        margin: 0;
+        padding-left: 22px;
+      }
+
+      li + li {
+        margin-top: 8px;
+      }
+
+      code {
+        padding: 2px 5px;
+        border: 1px solid var(--line);
+        border-radius: 5px;
+        background: var(--panel);
+        font-size: 0.95em;
+      }
+
+      .panel {
+        margin-top: 18px;
+        padding: 18px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--panel);
+      }
+
+      a {
+        color: var(--accent);
+      }
+
+      footer {
+        margin-top: 48px;
+        padding-top: 22px;
+        border-top: 1px solid var(--line);
+        color: var(--muted);
+        font-size: 14px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <div class="label">X API App Website</div>
+        <h1>yumin_ai Content Workflow</h1>
+        <p class="lead">
+          This page describes a small-scale workflow for AI-related content publishing,
+          draft review, post management, and basic engagement analysis for the X account
+          <a href="https://x.com/yumin_ai">@yumin_ai</a>.
+        </p>
+      </header>
+
+      <section>
+        <h2>Purpose</h2>
+        <p>
+          The application supports personal content operations for AI-related posts,
+          including Codex Automations, AI workflows, and practical AI usage.
+        </p>
+        <ul>
+          <li>Prepare and review X post drafts before publishing.</li>
+          <li>Retrieve the account's own post history to avoid duplicate topics.</li>
+          <li>Review basic engagement data for the account's own posts.</li>
+          <li>Use post history and engagement patterns for future content planning.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>Data Use</h2>
+        <p>
+          X API data is used only for limited personal content operations for
+          <code>yumin_ai</code>. X data and API outputs are not resold, redistributed,
+          used for surveillance, or used to train or fine-tune foundation or frontier models.
+        </p>
+      </section>
+
+      <section>
+        <h2>OAuth Callback</h2>
+        <div class="panel">
+          Callback URL:
+          <code>https://ryutarote.github.io/ai-broadcast-hub/api/auth/x/callback/</code>
+        </div>
+      </section>
+
+      <footer>
+        Contact and account identity: <a href="https://x.com/yumin_ai">@yumin_ai</a>
+      </footer>
+    </main>
+  </body>
+</html>

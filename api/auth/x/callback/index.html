@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>X OAuth Callback | yumin_ai</title>
+    <meta name="robots" content="noindex">
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #19201d;
+        --muted: #5f6f68;
+        --line: #d9e1dd;
+        --bg: #f7faf8;
+        --panel: #ffffff;
+        --accent: #0f8b6f;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        color: var(--ink);
+        background: var(--bg);
+        line-height: 1.65;
+      }
+
+      main {
+        width: min(760px, calc(100% - 40px));
+        margin: 0 auto;
+        padding: 56px 0;
+      }
+
+      h1 {
+        margin: 0 0 12px;
+        font-size: 34px;
+        letter-spacing: 0;
+      }
+
+      p {
+        margin: 0 0 16px;
+        color: var(--muted);
+      }
+
+      pre {
+        overflow-x: auto;
+        padding: 16px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--panel);
+        color: var(--ink);
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>X OAuth Callback</h1>
+      <p>
+        This static callback page is used for the yumin_ai X API application
+        configuration. If query parameters are present, they are displayed below
+        for manual verification during setup.
+      </p>
+      <pre id="params">No query parameters received.</pre>
+    </main>
+    <script>
+      const output = document.getElementById("params");
+      const params = new URLSearchParams(window.location.search);
+      if ([...params.keys()].length > 0) {
+        output.textContent = JSON.stringify(Object.fromEntries(params), null, 2);
+      }
+    </script>
+  </body>
+</html>
