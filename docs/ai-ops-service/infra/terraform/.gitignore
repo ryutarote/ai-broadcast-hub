@@ -1,0 +1,22 @@
+# Terraform state and lock
+*.tfstate
+*.tfstate.*
+*.tfplan
+
+# Local override
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Sensitive
+*.tfvars
+!*.tfvars.example
+
+# .terraform directories
+.terraform/
+.terraform.lock.hcl
+
+# Crash logs
+crash.log
+crash.*.log
