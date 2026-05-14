@@ -1,0 +1,19 @@
+【会議議事録（テスト用ダミーデータ）】
+
+日時：<JP_WAREKI_DATE>（水）14:00〜15:30
+場所：<JP_ADDRESS> 会議室A
+出席者：
+  - 株式会社サンプル <JP_PERSON_NAME>（代表取締役）
+  - 株式会社サンプル <JP_PERSON_NAME>（経理部長）
+
+議題：
+  1. 新規取引先（株式会社テスト, 法人番号 <JP_CORPORATE_NUMBER>）との取引開始
+  2. 顧客マイナンバー管理体制（個人番号は本資料には記載しない）
+
+連絡先：
+  - <JP_PERSON_NAME>  TEL: ****5678  Mobile: ****5678  Email: ta**@***.***
+  - <JP_PERSON_NAME>  TEL: ****5679  Email: ha**@***.***
+
+その他：
+  - 振込先：サンプル銀行 千代田支店 普通預金 <JP_BANK_ACCOUNT>
+  - 健康保険証関連の手続きについては別途、保険者番号 <JP_HEALTH_INSURANCE> で確認のこと。

@@ -1,0 +1,33 @@
+[project]
+name = "aegis-pii-jp"
+version = "0.1.0"
+description = "Aegis Japanese PII recognizers for Microsoft Presidio"
+readme = "../README.md"
+requires-python = ">=3.12"
+license = { text = "Proprietary" }
+authors = [{ name = "Aegis Engineering" }]
+
+dependencies = [
+    "presidio-analyzer >= 2.2.355",
+    "presidio-anonymizer >= 2.2.355",
+    "spacy >= 3.7",
+    # ja_core_news_md は別途 `python -m spacy download ja_core_news_md`
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest >= 8",
+    "pytest-cov >= 5",
+    "ruff >= 0.5",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.pytest.ini_options]
+testpaths = ["../tests"]
