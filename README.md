@@ -51,3 +51,18 @@ GitHub Pagesで公開するX API申請・OAuth設定用の静的ページ。
 Notion、Gmail、Slack、Microsoft Suiteなどのプラグインが使える環境では、`material_bank_sources.md` の参照先を実際のページ名・チャンネル名・フォルダ名に置き換える。
 
 プラグインが未接続の場合は、同ファイルに手動で素材メモを追記して代替する。
+
+## TikTok 全自動動画生成
+
+`tiktok/` 配下に、ろてじん（AivisSpeech / Style-Bert-VITS2 JP-Extra）で
+30本の縦型 mp4 を全自動生成するパイプラインを同梱。
+
+```bash
+cd tiktok
+bash tools/setup.sh                                # 初回のみ
+source .venv/bin/activate
+python -m pipeline.run --id 001                    # 1本テスト
+python -m pipeline.run                             # 30本一括
+```
+
+詳細は `tiktok/README.md` を参照。

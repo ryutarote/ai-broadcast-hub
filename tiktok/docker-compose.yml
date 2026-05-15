@@ -1,0 +1,18 @@
+services:
+  aivisspeech-engine:
+    image: ghcr.io/aivis-project/aivisspeech-engine:cpu-latest
+    container_name: aivisspeech-engine
+    ports:
+      - "10101:10101"
+    volumes:
+      - aivis-models:/home/user/.local/share/AivisSpeech-Engine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:10101/version"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+volumes:
+  aivis-models:
+    driver: local
