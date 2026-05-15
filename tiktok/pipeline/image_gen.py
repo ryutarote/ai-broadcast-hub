@@ -1,8 +1,8 @@
 """Pluggable AI image generation for scene backgrounds.
 
-Defaults to a pure-black background (most TikTok scripts in this project use
-black + telop). When IMAGE_GEN_BACKEND is set, an AI image is generated per
-scene with a prompt derived from the scene metadata.
+Defaults to a tasteful "near-black" radial gradient with subtle noise so the
+final video doesn't read as a flat black void on phone screens. When
+IMAGE_GEN_BACKEND is set, an AI image is generated per scene.
 """
 
 from __future__ import annotations
@@ -10,10 +10,11 @@ from __future__ import annotations
 import base64
 import hashlib
 import logging
+import random
 from pathlib import Path
 
 import requests
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFilter
 
 from .config import CONFIG
 
@@ -24,25 +25,63 @@ def _hash(text: str) -> str:
     return hashlib.sha1(text.encode("utf-8")).hexdigest()[:12]
 
 
-def make_black_background(width: int, height: int, out_path: Path) -> Path:
-    """Generate a pure black PNG to use as a scene background."""
+def make_designed_background(width: int, height: int, out_path: Path) -> Path:
+    """Generate a near-black background with a subtle radial vignette and grain.
+
+    This reads as 'dark' on phones but adds depth so the canvas doesn't feel
+    empty between telop and subtitle blocks.
+    """
     if out_path.exists():
         return out_path
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    img = Image.new("RGB", (width, height), (0, 0, 0))
-    img.save(out_path)
-    return out_path
+
+    # Start with a near-black canvas (#080808) instead of pure #000000.
+    base = Image.new("RGB", (width, height), (8, 8, 10))
+
+    # Radial vignette: brighter at center (~ rgb 28,28,32), darker at edges.
+    overlay = Image.new("L", (width, height), 0)
+    draw = ImageDraw.Draw(overlay)
+    cx, cy = width // 2, int(height * 0.42)
+    max_r = int((width**2 + height**2) ** 0.5 / 1.6)
+    # Draw concentric ellipses with decreasing brightness.
+    steps = 40
+    for i in range(steps):
+        rr = int(max_r * (1 - i / steps))
+        v = int(36 * (1 - i / steps))  # max brightness ~36
+        draw.ellipse(
+            (cx - rr, cy - rr, cx + rr, cy + rr), fill=v
+        )
+    overlay = overlay.filter(ImageFilter.GaussianBlur(radius=160))
+
+    # Add vignette to base.
+    base_px = base.load()
+    over_px = overlay.load()
+    rng = random.Random(42)
+    for y in range(height):
+        for x in range(width):
+            v = over_px[x, y]
+            r, g, b = base_px[x, y]
+            # Subtle film grain ±4.
+            n = rng.randint(-3, 3)
+            base_px[x, y] = (
+                max(0, min(255, r + v + n)),
+                max(0, min(255, g + v + n)),
+                max(0, min(255, b + int(v * 1.05) + n)),
+            )
+
+    base.save(out_path, "PNG", optimize=True)
+    return base.filename if hasattr(base, "filename") else out_path  # type: ignore[return-value]
+
+
+def make_black_background(width: int, height: int, out_path: Path) -> Path:
+    """Backward compat alias - now returns the designed background."""
+    return make_designed_background(width, height, out_path)
 
 
 def generate_scene_image(prompt: str, out_path: Path) -> Path:
-    """Generate an image for a scene using the configured backend.
-
-    Falls back to a black background when no backend is configured or when
-    generation fails (the pipeline must keep running).
-    """
     backend = CONFIG.image_gen_backend.lower().strip()
     if not backend:
-        return make_black_background(
+        return make_designed_background(
             CONFIG.video_width, CONFIG.video_height, out_path
         )
 
@@ -57,13 +96,12 @@ def generate_scene_image(prompt: str, out_path: Path) -> Path:
     except Exception as exc:  # noqa: BLE001
         logger.warning("Image generation failed (%s): %s", backend, exc)
 
-    return make_black_background(
+    return make_designed_background(
         CONFIG.video_width, CONFIG.video_height, out_path
     )
 
 
 def _generate_openai(prompt: str, out_path: Path) -> Path:
-    """OpenAI gpt-image-1 backend."""
     if not CONFIG.openai_api_key:
         raise RuntimeError("OPENAI_API_KEY is not set")
     r = requests.post(
@@ -86,13 +124,11 @@ def _generate_openai(prompt: str, out_path: Path) -> Path:
     raw = base64.b64decode(b64)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_bytes(raw)
-    # Resize/letterbox to target resolution
     _fit_to_target(out_path)
     return out_path
 
 
 def _generate_stability(prompt: str, out_path: Path) -> Path:
-    """Stability AI (SDXL/Core) backend."""
     if not CONFIG.stability_api_key:
         raise RuntimeError("STABILITY_API_KEY is not set")
     r = requests.post(
@@ -102,11 +138,7 @@ def _generate_stability(prompt: str, out_path: Path) -> Path:
             "Accept": "image/*",
         },
         files={"none": ""},
-        data={
-            "prompt": prompt,
-            "aspect_ratio": "9:16",
-            "output_format": "png",
-        },
+        data={"prompt": prompt, "aspect_ratio": "9:16", "output_format": "png"},
         timeout=180,
     )
     r.raise_for_status()
@@ -127,18 +159,3 @@ def _fit_to_target(path: Path) -> None:
     top = (img.size[1] - target_h) // 2
     img = img.crop((left, top, left + target_w, top + target_h))
     img.save(path)
-
-
-def image_for_scene(scene: dict, scene_index: int, post_id: str) -> Path:
-    """Resolve (or generate) the background image for a single scene."""
-    prompt = scene.get("image_prompt", "").strip()
-    visual = scene.get("visual", "black").strip().lower()
-
-    if visual == "black" or not prompt:
-        out = CONFIG.image_dir / f"{post_id}_black.png"
-        return make_black_background(
-            CONFIG.video_width, CONFIG.video_height, out
-        )
-
-    out = CONFIG.image_dir / f"{post_id}_{scene_index:02d}_{_hash(prompt)}.png"
-    return generate_scene_image(prompt, out)

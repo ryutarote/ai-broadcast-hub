@@ -115,12 +115,17 @@ def render_post(post: dict, tts: AivisTTS) -> Path:
     ass_path = CONFIG.subtitle_dir / f"{post_id}.ass"
     build_ass(
         scenes_with_timing=scenes_timing,
+        title=post.get("title", ""),
         cta_text=post.get("cta", ""),
         cta_offset_sec=cta_offset,
         out_path=ass_path,
     )
 
-    compose_video(audio_path, bg_path, ass_path, final_mp4)
+    boundaries = [s["start"] for s in scenes_timing]
+    compose_video(
+        audio_path, bg_path, ass_path, final_mp4,
+        scene_boundaries=boundaries,
+    )
     logger.info("[%s] done -> %s", post_id, final_mp4)
     return final_mp4
 

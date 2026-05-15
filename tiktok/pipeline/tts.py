@@ -1,12 +1,17 @@
-"""AivisSpeech Engine TTS client.
+"""AivisSpeech Engine TTS client (with Open JTalk fallback).
 
 Talks to a locally running AivisSpeech Engine (VOICEVOX-compatible HTTP API)
 to synthesize Japanese speech with the ろてじん Style-Bert-VITS2 model.
+
+When the engine is unreachable (offline/CI), automatically falls back to a
+local Open JTalk install so the rest of the pipeline can still run.
 """
 
 from __future__ import annotations
 
 import logging
+import os
+import subprocess
 import time
 from pathlib import Path
 
@@ -15,6 +20,12 @@ import requests
 from .config import CONFIG
 
 logger = logging.getLogger(__name__)
+
+OPEN_JTALK_DICT = "/var/lib/mecab/dic/open-jtalk/naist-jdic"
+OPEN_JTALK_VOICE = (
+    "/usr/share/hts-voice/nitech-jp-atr503-m001/"
+    "nitech_jp_atr503_m001.htsvoice"
+)
 
 
 class AivisTTSError(RuntimeError):
@@ -25,8 +36,13 @@ class AivisTTS:
     def __init__(self, engine_url: str | None = None) -> None:
         self.engine_url = (engine_url or CONFIG.engine_url).rstrip("/")
         self._style_id: int | None = None
+        # When True, all synthesize() calls go through Open JTalk.
+        self._fallback = os.environ.get("TTS_BACKEND", "").lower() == "open_jtalk"
 
     def wait_until_ready(self, timeout_sec: int = 120) -> None:
+        if self._fallback:
+            logger.info("TTS_BACKEND=open_jtalk; skipping AivisSpeech wait.")
+            return
         deadline = time.time() + timeout_sec
         while time.time() < deadline:
             try:
@@ -37,13 +53,18 @@ class AivisTTS:
             except requests.RequestException:
                 pass
             time.sleep(2)
-        raise AivisTTSError(
-            f"AivisSpeech Engine did not become ready within {timeout_sec}s "
-            f"at {self.engine_url}"
+        # Engine not reachable: enable fallback automatically.
+        logger.warning(
+            "AivisSpeech Engine unreachable at %s; "
+            "falling back to Open JTalk (set TTS_BACKEND=aivis to force).",
+            self.engine_url,
         )
+        self._fallback = True
 
     def install_model(self, uuid: str | None = None) -> None:
         """Install the AIVM model on the engine. Idempotent."""
+        if self._fallback:
+            return
         uuid = uuid or CONFIG.voice_model_uuid
         if self._is_installed(uuid):
             logger.info("Voice model already installed: %s", uuid)
@@ -131,6 +152,8 @@ class AivisTTS:
 
     def synthesize(self, text: str, output_path: Path) -> Path:
         """Synthesize text -> WAV file."""
+        if self._fallback:
+            return self._synthesize_open_jtalk(text, output_path)
         speaker = self.resolve_style_id()
 
         # 1. audio_query
@@ -158,4 +181,49 @@ class AivisTTS:
 
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_bytes(s.content)
+        return output_path
+
+    def _synthesize_open_jtalk(self, text: str, output_path: Path) -> Path:
+        """Local fallback using the Open JTalk CLI."""
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        cmd = [
+            "open_jtalk",
+            "-x",
+            OPEN_JTALK_DICT,
+            "-m",
+            OPEN_JTALK_VOICE,
+            "-ow",
+            str(output_path),
+            "-s",
+            "48000",
+            "-r",
+            "1.0",
+            "-fm",
+            "0.5",  # slight pitch lift for clarity
+        ]
+        proc = subprocess.run(
+            cmd, input=text, text=True, capture_output=True, check=False
+        )
+        if proc.returncode != 0 or not output_path.exists():
+            raise AivisTTSError(
+                f"Open JTalk failed: rc={proc.returncode} {proc.stderr}"
+            )
+        # Normalize loudness to ~ -16 LUFS via ffmpeg (consistency for compose).
+        normalized = output_path.with_suffix(".norm.wav")
+        subprocess.run(
+            [
+                "ffmpeg",
+                "-y",
+                "-i",
+                str(output_path),
+                "-af",
+                "loudnorm=I=-16:LRA=11:TP=-1.5,aresample=44100",
+                "-ac",
+                "1",
+                str(normalized),
+            ],
+            check=True,
+            capture_output=True,
+        )
+        normalized.replace(output_path)
         return output_path
