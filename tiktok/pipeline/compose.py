@@ -281,7 +281,7 @@ def compose_video(
         "-c:v",
         "libx264",
         "-preset",
-        "medium",
+        "fast",
         "-crf",
         "20",
         "-pix_fmt",
