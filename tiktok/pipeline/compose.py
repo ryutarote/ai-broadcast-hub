@@ -94,7 +94,7 @@ def compose_video(
     subtitle_path: Path,
     out_path: Path,
     progress_bar: bool = True,
-    tail_seconds: float = 4.5,
+    tail_seconds: float = 3.2,
     scene_boundaries: list[float] | None = None,
 ) -> Path:
     """Compose final mp4.
@@ -126,10 +126,10 @@ def compose_video(
         capture_output=True,
     )
 
-    # 2. Mix in a soft ambient pad (two-note sine drone with a slow LFO)
-    # under the narration at -28 dB. This rescues the otherwise dead
-    # silence between phrases and is the single biggest perceived-quality
-    # bump for talking-head TikToks.
+    # 2. Mix in a richer ambient bed: A-minor pad built from 4 detuned
+    # sine layers (A2 / C3 / E3 / A3) with slow tremolo + lowpass for
+    # warmth. Sits at roughly -24 LUFS under the voice; loud enough to
+    # carry through silent CTA gaps but not compete with narration.
     mixed_audio = audio_path.with_name(audio_path.stem + ".mix.wav")
     subprocess.run(
         [
@@ -137,39 +137,36 @@ def compose_video(
             "-y",
             "-i",
             str(padded_voice),
-            "-f",
-            "lavfi",
-            "-t",
-            f"{total_dur:.3f}",
-            "-i",
-            (
-                "sine=frequency=110:sample_rate=44100,"
-                "atempo=1.0,volume=0.04"
-            ),
-            "-f",
-            "lavfi",
-            "-t",
-            f"{total_dur:.3f}",
-            "-i",
-            (
-                "sine=frequency=146.83:sample_rate=44100,"
-                "atempo=1.0,volume=0.03"
-            ),
+            "-f", "lavfi", "-t", f"{total_dur:.3f}",
+            "-i", "sine=frequency=110:sample_rate=44100",
+            "-f", "lavfi", "-t", f"{total_dur:.3f}",
+            "-i", "sine=frequency=130.81:sample_rate=44100",
+            "-f", "lavfi", "-t", f"{total_dur:.3f}",
+            "-i", "sine=frequency=164.81:sample_rate=44100",
+            "-f", "lavfi", "-t", f"{total_dur:.3f}",
+            "-i", "sine=frequency=220:sample_rate=44100",
             "-filter_complex",
             (
-                "[1:a][2:a]amerge=inputs=2,pan=mono|c0=0.5*c0+0.5*c1,"
-                "tremolo=f=0.18:d=0.5,aformat=sample_fmts=s16:"
-                "channel_layouts=mono[bed];"
+                # Build the chord at low individual volumes, sum, soften.
+                "[1:a]volume=0.16[a1];"
+                "[2:a]volume=0.10[a2];"
+                "[3:a]volume=0.09[a3];"
+                "[4:a]volume=0.07[a4];"
+                "[a1][a2][a3][a4]amix=inputs=4:duration=longest:"
+                "dropout_transition=0,"
+                "tremolo=f=0.22:d=0.45,"
+                # Lowpass takes the harsh edge off the pure sines.
+                "lowpass=f=1800,"
+                # Ducks slightly so the voice still sits on top.
+                "volume=0.55,"
+                "aformat=sample_fmts=s16:channel_layouts=mono[bed];"
                 "[0:a][bed]amix=inputs=2:duration=first:"
-                "weights='1 0.45':dropout_transition=0,"
-                # TikTok's recommended program loudness target.
+                "weights='1 1':dropout_transition=0,"
                 "loudnorm=I=-14:LRA=9:TP=-1.5,"
                 "aresample=44100"
             ),
-            "-ac",
-            "1",
-            "-t",
-            f"{total_dur:.3f}",
+            "-ac", "1",
+            "-t", f"{total_dur:.3f}",
             str(mixed_audio),
         ],
         check=True,
@@ -228,22 +225,18 @@ def compose_video(
             )
     flash_filter = ("," + ",".join(flash_filters)) if flash_filters else ""
 
-    # Soft dark bands to keep telop/CTA readable as the bg zooms.
+    # The original design used solid 0.45-opacity bands at top/bottom and
+    # cyan side bars to create a "framed" feel. Pro reviewer flagged that
+    # the bands + bars shrink the perceived screen on phones. We now drop
+    # the side bars entirely and use very light bands (0.20) only as a
+    # contrast helper for the telop/CTA against the zooming background.
     top_band_filter = (
-        f",drawbox=x=0:y=0:w={w}:h=180:color=black@0.45:t=fill"
+        f",drawbox=x=0:y=0:w={w}:h=160:color=black@0.20:t=fill"
     )
     bottom_band_filter = (
-        f",drawbox=x=0:y={h - 200}:w={w}:h=200:color=black@0.45:t=fill"
+        f",drawbox=x=0:y={h - 180}:w={w}:h=180:color=black@0.20:t=fill"
     )
-
-    # Side accent bars (left/right thin vertical lines) for depth.
-    side_bars_filter = (
-        f",drawbox=x=40:y=240:w=3:h={h - 460}:color=0x00F0FF@0.18:t=fill,"
-        f"drawbox=x={w - 43}:y=240:w=3:h={h - 460}:color=0x00F0FF@0.18:t=fill"
-    )
-
-    # Top-left brand tag (small, near safe-area).
-    # Drawtext with Noto JP if available - keeps the channel mark visible.
+    side_bars_filter = ""
     brand_filter = ""
 
     vf = (

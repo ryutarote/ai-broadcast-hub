@@ -96,7 +96,9 @@ def _wrap_lines(text: str, max_chars: int = 15) -> str:
 
     lines: list[str] = []
     remaining = text
-    for _ in range(2):
+    # Up to 4 lines so a very long single sentence doesn't overflow the
+    # last line off-screen. Three lines of 15 chars = 45 chars, four = 60.
+    for _ in range(3):
         if len(remaining) <= max_chars:
             break
         pos = find_break(remaining)
@@ -245,11 +247,12 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         safe = _escape(telop)
         wrapped = _telop_lines(safe, max_chars=11) if telop else ""
         highlighted = _highlight_numbers(wrapped) if wrapped else ""
-        # Combined effect: fade + scale pop + slight scale settle.
+        # Combined effect: quick fade-in + scale pop + settle.
+        # 100ms fade-in (down from 220) so climactic scenes don't waste time.
         effect = (
-            "{\\fad(220,160)"
-            "\\t(0,90,\\fscx116\\fscy116\\frz-2)"
-            "\\t(90,360,\\fscx100\\fscy100\\frz0)"
+            "{\\fad(100,140)"
+            "\\t(0,80,\\fscx118\\fscy118\\frz-2)"
+            "\\t(80,280,\\fscx100\\fscy100\\frz0)"
             "}"
         )
         if telop:

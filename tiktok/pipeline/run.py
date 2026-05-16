@@ -109,7 +109,8 @@ def render_post(post: dict, tts: AivisTTS) -> Path:
 
     audio_path, scenes_timing = synthesize_post_audio(post, tts)
     audio_duration = ffprobe_duration(audio_path)
-    cta_offset = audio_duration + 0.2
+    # CTA appears immediately after narration ends - no dead silence gap.
+    cta_offset = audio_duration
 
     bg_path = background_for_post(post)
     ass_path = CONFIG.subtitle_dir / f"{post_id}.ass"
