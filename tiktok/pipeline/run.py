@@ -120,6 +120,8 @@ def render_post(post: dict, tts: AivisTTS) -> Path:
         cta_text=post.get("cta", ""),
         cta_offset_sec=cta_offset,
         out_path=ass_path,
+        episode=post.get("episode"),
+        arc=post.get("arc"),
     )
 
     boundaries = [s["start"] for s in scenes_timing]

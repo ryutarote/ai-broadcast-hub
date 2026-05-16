@@ -174,6 +174,8 @@ def build_ass(
     cta_text: str,
     cta_offset_sec: float,
     out_path: Path,
+    episode: int | None = None,
+    arc: str | None = None,
 ) -> Path:
     """Build a polished ASS subtitle track.
 
@@ -217,7 +219,8 @@ Style: Telop,{font},96,&H00FFFFFF,&H000000FF,&H00000000,&H90000000,1,0,0,0,100,1
 Style: Subtitle,{font},64,&H00FFFFFF,&H000000FF,&H00000000,&HB0000000,1,0,0,0,100,100,0,0,1,5,3,8,80,80,{sub_margin_v},1
 Style: CTA,{font},116,&H00000000,&H000000FF,&H00FFFFFF,&H0000F0FF,1,0,0,0,100,100,3,0,3,0,5,5,80,80,{cta_margin_v},1
 Style: Counter,{font},42,&H00C8C8C8,&H000000FF,&H00000000,&H60000000,1,0,0,0,100,100,0,0,1,3,2,9,40,40,260,1
-Style: Brand,{font},36,&H0000F0FF,&H000000FF,&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,3,2,7,40,40,260,1
+Style: Brand,{font},36,&H0000F0FF,&H000000FF,&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,3,2,7,40,40,210,1
+Style: Episode,{font},38,&H00FFFFFF,&H000000FF,&H00000000,&HA0000000,1,0,0,0,100,100,0,0,1,3,2,7,40,40,265,1
 Style: CTAArrow,{font},88,&H00000000,&H000000FF,&H00FFFFFF,&H00000000,1,0,0,0,100,100,0,0,1,4,2,2,0,0,440,1
 
 [Events]
@@ -314,12 +317,22 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             f"}}↑ プロフィールへ"
         )
 
-    # 4. Brand tag (subtle, permanent, top-left)
+    # 4. Brand tag + episode badge (permanent, top-left, stacked).
     last_t = scenes_with_timing[-1]["end"] if scenes_with_timing else 0
+    end_t = last_t + 5
     events.append(
-        f"Dialogue: 0,{_ass_time(0)},{_ass_time(last_t + 5)},Brand,,0,0,0,,"
+        f"Dialogue: 0,{_ass_time(0)},{_ass_time(end_t)},Brand,,0,0,0,,"
         f"{{\\fad(400,200)}}卒業計画"
     )
+    if episode and episode > 0:
+        # Render as "第N話 · <arc>" if arc supplied, else just "第N話".
+        label = f"第{episode}話"
+        if arc:
+            label += f" · {_escape(arc)}"
+        events.append(
+            f"Dialogue: 0,{_ass_time(0)},{_ass_time(end_t)},Episode,,0,0,0,,"
+            f"{{\\fad(500,200)}}{label}"
+        )
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(header + "\n".join(events) + "\n", encoding="utf-8")
