@@ -28,6 +28,75 @@ OPEN_JTALK_VOICE = (
 )
 
 
+_DIGIT_KANJI = "〇一二三四五六七八九"
+
+
+def _under_ten_thousand(n: int) -> str:
+    """Convert 0..9999 to kanji form (一千二百三十四 style)."""
+    if n == 0:
+        return ""
+    parts: list[str] = []
+    thousands = n // 1000
+    if thousands:
+        if thousands > 1:
+            parts.append(_DIGIT_KANJI[thousands])
+        parts.append("千")
+        n %= 1000
+    hundreds = n // 100
+    if hundreds:
+        if hundreds > 1:
+            parts.append(_DIGIT_KANJI[hundreds])
+        parts.append("百")
+        n %= 100
+    tens = n // 10
+    if tens:
+        if tens > 1:
+            parts.append(_DIGIT_KANJI[tens])
+        parts.append("十")
+        n %= 10
+    if n:
+        parts.append(_DIGIT_KANJI[n])
+    return "".join(parts)
+
+
+def _num_to_kanji(n: int) -> str:
+    """Convert a positive integer to Japanese kanji digit form.
+
+    Supports up to oku (10^8). 0 -> 零. Used to help Open JTalk read
+    multi-digit numerals with natural prosody.
+    """
+    if n == 0:
+        return "零"
+    parts: list[str] = []
+    oku, remainder = divmod(n, 10**8)
+    if oku:
+        parts.append(_under_ten_thousand(oku) + "億")
+    man, remainder = divmod(remainder, 10**4)
+    if man:
+        parts.append(_under_ten_thousand(man) + "万")
+    if remainder:
+        parts.append(_under_ten_thousand(remainder))
+    return "".join(parts)
+
+
+_NUM_RE = __import__("re").compile(r"\d{1,9}(?:,\d{3})*")
+
+
+def _normalize_for_tts(text: str) -> str:
+    """Replace Arabic numerals with kanji so Open JTalk reads them naturally.
+
+    Display text in the video keeps the original digits (more readable);
+    only the synthesis input is rewritten.
+    """
+    def repl(m):
+        digits = m.group(0).replace(",", "")
+        try:
+            return _num_to_kanji(int(digits))
+        except ValueError:
+            return m.group(0)
+    return _NUM_RE.sub(repl, text)
+
+
 class AivisTTSError(RuntimeError):
     pass
 
@@ -184,25 +253,32 @@ class AivisTTS:
         return output_path
 
     def _synthesize_open_jtalk(self, text: str, output_path: Path) -> Path:
-        """Local fallback using the Open JTalk CLI."""
+        """Local fallback using the Open JTalk CLI.
+
+        Pre-normalizes numerals to kanji so multi-digit numbers read with
+        natural Japanese prosody (千二百四十七 not 1-2-4-7).
+        """
         output_path.parent.mkdir(parents=True, exist_ok=True)
+        text_norm = _normalize_for_tts(text)
         cmd = [
             "open_jtalk",
-            "-x",
-            OPEN_JTALK_DICT,
-            "-m",
-            OPEN_JTALK_VOICE,
-            "-ow",
-            str(output_path),
-            "-s",
-            "48000",
-            "-r",
-            "1.0",
-            "-fm",
-            "0.5",  # slight pitch lift for clarity
+            "-x", OPEN_JTALK_DICT,
+            "-m", OPEN_JTALK_VOICE,
+            "-ow", str(output_path),
+            "-s", "48000",
+            # Slightly slower for clarity; default 1.0
+            "-r", "0.95",
+            # No pitch shift (default voice timbre); was 0.5 which added a
+            # high-pitched lift that read as unnatural.
+            "-fm", "0.0",
+            # Boost F0 variance => more natural intonation contour
+            # (default 1.0 sounds flat/robotic).
+            "-jf", "1.4",
+            # Slight mel-cepstrum variance boost for crisper consonants.
+            "-jm", "1.1",
         ]
         proc = subprocess.run(
-            cmd, input=text, text=True, capture_output=True, check=False
+            cmd, input=text_norm, text=True, capture_output=True, check=False
         )
         if proc.returncode != 0 or not output_path.exists():
             raise AivisTTSError(

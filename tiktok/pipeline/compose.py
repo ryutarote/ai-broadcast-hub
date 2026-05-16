@@ -202,9 +202,10 @@ def compose_video(
     ) if progress_bar else ""
 
     # Yellow accent divider between telop and subtitle.
-    # Hidden during the CTA tail (audio_dur..total_dur) so the yellow CTA
-    # card reads as the focal element.
-    divider_y = 620
+    # Sits between the centered telop (ends ~y=850) and subtitle (starts
+    # ~y=1000). Hidden during the CTA tail so the yellow CTA card reads
+    # as the focal element.
+    divider_y = 920
     divider_w = int(w * 0.35)
     divider_x = (w - divider_w) // 2
     divider_filter = (

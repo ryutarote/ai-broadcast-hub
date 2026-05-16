@@ -22,8 +22,13 @@ from .config import CONFIG
 
 SAFE_TOP = 240
 SAFE_BOTTOM = 470  # bigger to keep clear of caption + buttons
-TELOP_Y_FROM_TOP = 300
-SUBTITLE_Y_FROM_TOP = 700   # subtitle sits ~250px below telop area
+# Vertically centered content block:
+#   Telop  top  ≈ y=600  (content 600..850)
+#   Divider     ≈ y=920
+#   Subtitle    ≈ y=1000 (content 1000..1250)
+# Screen center y=960 sits between divider and subtitle, balancing the block.
+TELOP_Y_FROM_TOP = 600
+SUBTITLE_Y_FROM_TOP = 1000
 
 
 def _ass_time(seconds: float) -> str:
