@@ -1,27 +1,33 @@
 name: TikTok daily post (@ex_gambler_kazuki)
 
-# Runs every day at 12:00 UTC (= 21:00 JST). Manual dispatch supported.
+# Runs every day at 09:00 UTC = 18:00 JST (6:00 PM). Launch gate skips
+# all scheduled runs before LAUNCH_AT_UTC. Manual dispatch ignores the
+# gate so the operator can always force a post.
 #
 # Required repository secrets:
 #   TIKTOK_COOKIES_TXT     Netscape-format cookies for the TikTok account
-#                          (copy from EditThisCookie / Cookie-Editor extension)
+#                          (copy from Cookie-Editor extension)
 #   DISCORD_WEBHOOK_URL    Optional Discord webhook for success/failure pings
-#   VIDEOS_BUNDLE_URL      Optional URL to a zip of all 31 mp4 files; if set
-#                          the workflow downloads & extracts it (recommended
-#                          when output/final/ is gitignored)
 #
-# Required repository variable:
+# Required repository variables:
 #   POSTING_MODE           "auto" or "manual" (default: manual)
+#   VIDEOS_BUNDLE_URL      URL to a zip of all 31 mp4 files. The workflow
+#                          downloads & extracts it because output/final/
+#                          is gitignored.
 
 on:
   schedule:
-    - cron: "0 12 * * *"
+    - cron: "0 9 * * *"
   workflow_dispatch:
     inputs:
       force_id:
         description: "Force post a specific id (e.g. 003). Leave empty for next-in-queue."
         required: false
         default: ""
+      bypass_launch_gate:
+        description: "Set to 'yes' to run before the launch date (for smoke tests)."
+        required: false
+        default: "no"
 
 permissions:
   contents: write  # needed to commit state.json updates
@@ -30,8 +36,37 @@ concurrency:
   group: tiktok-daily-post
   cancel-in-progress: false
 
+env:
+  # First scheduled post fires at 2026-05-24 18:00 JST = 09:00 UTC.
+  LAUNCH_AT_UTC: "2026-05-24T09:00:00Z"
+
 jobs:
+  precheck:
+    runs-on: ubuntu-latest
+    outputs:
+      go: ${{ steps.gate.outputs.go }}
+    steps:
+      - id: gate
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            if [ "${{ inputs.bypass_launch_gate }}" = "yes" ]; then
+              echo "manual dispatch with gate bypass"
+              echo "go=true" >> "$GITHUB_OUTPUT"; exit 0
+            fi
+          fi
+          launch=$(date -u -d "$LAUNCH_AT_UTC" +%s)
+          now=$(date -u +%s)
+          if [ "$now" -ge "$launch" ]; then
+            echo "Past launch ($LAUNCH_AT_UTC) — proceed"
+            echo "go=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Before launch ($LAUNCH_AT_UTC) — skipping"
+            echo "go=false" >> "$GITHUB_OUTPUT"
+          fi
+
   post:
+    needs: precheck
+    if: needs.precheck.outputs.go == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -69,12 +104,13 @@ jobs:
           printf "%s" "$COOKIES" > tiktok/secrets/cookies.txt
           chmod 600 tiktok/secrets/cookies.txt
 
-      - name: Download video bundle (when output/final is gitignored)
+      - name: Download video bundle
         if: ${{ vars.VIDEOS_BUNDLE_URL != '' }}
         run: |
           mkdir -p tiktok/output/final
           curl -fsSL "${{ vars.VIDEOS_BUNDLE_URL }}" -o /tmp/videos.zip
           unzip -o /tmp/videos.zip -d tiktok/output/final
+          ls tiktok/output/final | head
 
       - name: Post next video
         working-directory: tiktok

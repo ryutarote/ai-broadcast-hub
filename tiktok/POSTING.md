@@ -129,47 +129,66 @@ python -m posting.run --id 000         # ← 実投稿（イントロから）
 
 ## GitHub Actions 運用（クラウド完全自動）
 
-`.github/workflows/tiktok-daily-post.yml` が同梱されており、`main` ブランチに
-マージするだけで毎日 12:00 UTC（21:00 JST）に動作します。
+`.github/workflows/tiktok-daily-post.yml` が同梱。
+**初回投稿: 2026-05-24 18:00 JST**、以降毎日同時刻（09:00 UTC）。
 
-### 必要な Secrets / Variables 設定
+その日が来るまでスケジュールトリガーは `precheck` ジョブで自動 no-op します
+（workflow_dispatch + `bypass_launch_gate=yes` で先行テスト可能）。
 
-リポジトリ **Settings → Secrets and variables → Actions**:
+### ワンショットセットアップ
 
-| 種別 | 名前 | 内容 |
-|---|---|---|
-| Secret | `TIKTOK_COOKIES_TXT` | cookies.txt の中身全文（auto モード時のみ必要）|
-| Secret | `DISCORD_WEBHOOK_URL` | 通知用 Webhook URL（強推奨）|
-| Variable | `POSTING_MODE` | `manual` or `auto`（未設定なら manual） |
-| Variable | `VIDEOS_BUNDLE_URL` | 31本の mp4 を ZIP にまとめた URL（後述）|
-
-### 動画ファイルの取り回し
-
-`output/final/` は `.gitignore` に入っているので、CI ジョブは動画を手元に
-持ちません。3 つの選択肢:
-
-1. **`VIDEOS_BUNDLE_URL` で配信** — `output/final/` を zip にして GitHub
-   Release / S3 / Dropbox / Google Drive の直リンクに置き、変数に URL を
-   登録。Actions が毎回ダウンロードして展開。**推奨**。
-2. **git-lfs で動画を版管理** — `output/` のうち `*.mp4` だけ LFS で追跡。
-3. **クラウドストレージ from script** — 投稿スクリプトを拡張して S3 等から
-   ダイレクトに取得。
-
-最速なのは選択肢 1。
+リポジトリのオーナーが **1 度だけ** 実行:
 
 ```bash
-# zip を作って GitHub Release にアップ
-cd tiktok
-zip -j /tmp/ex_gambler_kazuki_videos.zip output/final/*.mp4
-gh release create v1.0-videos /tmp/ex_gambler_kazuki_videos.zip \
-  --title "卒業計画 動画素材" --notes "31本 / 1080x1920 / mp4"
-# 出力されたアセット URL を VIDEOS_BUNDLE_URL に設定
+# gh CLI を認証
+gh auth login
+
+# 動画 ZIP → GitHub Release → リポジトリ変数 VIDEOS_BUNDLE_URL まで一括
+bash tiktok/tools/setup-github-release.sh
 ```
+
+このスクリプトが行うこと:
+1. `tiktok/output/final/*.mp4` を `/tmp/ex_gambler_kazuki_videos.zip` に圧縮
+2. リポジトリの Release `v1.0-videos` に asset アップロード（既存なら上書き）
+3. asset の直 URL をリポジトリ変数 `VIDEOS_BUNDLE_URL` に登録
+4. 設定後の値を表示
+
+### 残りの手動設定
+
+リポジトリ **Settings → Secrets and variables → Actions** で:
+
+| 種別 | 名前 | 内容 | 必須？ |
+|---|---|---|---|
+| Variable | `VIDEOS_BUNDLE_URL` | スクリプトが自動設定 | ✅ |
+| Variable | `POSTING_MODE` | `manual` or `auto`（未設定なら manual） | 任意 |
+| Secret | `TIKTOK_COOKIES_TXT` | cookies.txt の中身全文 | auto時のみ |
+| Secret | `DISCORD_WEBHOOK_URL` | 通知 Webhook URL | 強推奨 |
+
+### 投稿スケジュール
+
+- **初回**: 2026-05-24 18:00 JST に 第0話（イントロ）を投稿
+- **以降**: 毎日 18:00 JST に第N話を1本ずつ
+- **完了**: 2026-06-23 頃に第30話で完結
+- **時間変更**: workflow ファイルの `cron: "0 9 * * *"` を編集（UTC 表記）
 
 ### 手動実行
 
-リポジトリ **Actions タブ → "TikTok daily post" → Run workflow**。
-`force_id` を指定すれば任意の話を投稿可能。
+- 通常: **Actions タブ → "TikTok daily post" → Run workflow** → 空欄で実行
+  → 次のキューを投稿
+- 特定話を強制: `force_id` に `005` などを入れて実行
+- 発射日前のスモークテスト: `bypass_launch_gate` に `yes` を入れて実行
+
+### 動画 ZIP の作り直し
+
+台本を修正して `posts.json` を変えたら、`pipeline.run` で再生成 → 同じ
+スクリプトを再実行すれば Release asset と変数が更新される（冪等）。
+
+```bash
+cd tiktok
+source .venv/bin/activate
+python -m pipeline.run        # 必要な動画だけ再生成
+bash tools/setup-github-release.sh
+```
 
 ---
 
