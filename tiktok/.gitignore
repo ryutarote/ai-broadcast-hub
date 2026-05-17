@@ -7,5 +7,7 @@ assets/bg/*.jpg
 __pycache__/
 *.pyc
 *.pyo
+secrets/
+posting/logs/
 .venv/
 venv/

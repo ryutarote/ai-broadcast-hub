@@ -1,0 +1,113 @@
+name: TikTok daily post (@ex_gambler_kazuki)
+
+# Runs every day at 12:00 UTC (= 21:00 JST). Manual dispatch supported.
+#
+# Required repository secrets:
+#   TIKTOK_COOKIES_TXT     Netscape-format cookies for the TikTok account
+#                          (copy from EditThisCookie / Cookie-Editor extension)
+#   DISCORD_WEBHOOK_URL    Optional Discord webhook for success/failure pings
+#   VIDEOS_BUNDLE_URL      Optional URL to a zip of all 31 mp4 files; if set
+#                          the workflow downloads & extracts it (recommended
+#                          when output/final/ is gitignored)
+#
+# Required repository variable:
+#   POSTING_MODE           "auto" or "manual" (default: manual)
+
+on:
+  schedule:
+    - cron: "0 12 * * *"
+  workflow_dispatch:
+    inputs:
+      force_id:
+        description: "Force post a specific id (e.g. 003). Leave empty for next-in-queue."
+        required: false
+        default: ""
+
+permissions:
+  contents: write  # needed to commit state.json updates
+
+concurrency:
+  group: tiktok-daily-post
+  cancel-in-progress: false
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 1
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install ffmpeg + fonts (for any TTS / re-render)
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y ffmpeg fonts-noto-cjk \
+              open-jtalk open-jtalk-mecab-naist-jdic \
+              hts-voice-nitech-jp-atr503-m001
+
+      - name: Install Python deps
+        working-directory: tiktok
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install tiktok-uploader
+
+      - name: Materialize cookies
+        if: ${{ secrets.TIKTOK_COOKIES_TXT != '' }}
+        env:
+          COOKIES: ${{ secrets.TIKTOK_COOKIES_TXT }}
+        run: |
+          mkdir -p tiktok/secrets
+          printf "%s" "$COOKIES" > tiktok/secrets/cookies.txt
+          chmod 600 tiktok/secrets/cookies.txt
+
+      - name: Download video bundle (when output/final is gitignored)
+        if: ${{ vars.VIDEOS_BUNDLE_URL != '' }}
+        run: |
+          mkdir -p tiktok/output/final
+          curl -fsSL "${{ vars.VIDEOS_BUNDLE_URL }}" -o /tmp/videos.zip
+          unzip -o /tmp/videos.zip -d tiktok/output/final
+
+      - name: Post next video
+        working-directory: tiktok
+        env:
+          POSTING_MODE: ${{ vars.POSTING_MODE || 'manual' }}
+          TIKTOK_USERNAME: ex_gambler_kazuki
+          TIKTOK_COOKIES_PATH: ${{ github.workspace }}/tiktok/secrets/cookies.txt
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          if [ -n "${{ inputs.force_id }}" ]; then
+            python -m posting.run --id "${{ inputs.force_id }}"
+          else
+            python -m posting.run
+          fi
+
+      - name: Commit updated state.json
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet tiktok/posting/state.json; then
+            echo "state.json unchanged"
+          else
+            git add tiktok/posting/state.json
+            git commit -m "posting: state.json $(date -u +%Y-%m-%dT%H:%M:%SZ) [skip ci]"
+            git push
+          fi
+
+      - name: Upload run log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: posting-log
+          path: tiktok/posting/logs/
+          if-no-files-found: ignore
+          retention-days: 14
