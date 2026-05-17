@@ -135,31 +135,25 @@ python -m posting.run --id 000         # ← 実投稿（イントロから）
 その日が来るまでスケジュールトリガーは `precheck` ジョブで自動 no-op します
 （workflow_dispatch + `bypass_launch_gate=yes` で先行テスト可能）。
 
-### ワンショットセットアップ
+### 動画はCIで毎回生成される
 
-リポジトリのオーナーが **1 度だけ** 実行:
+事前バンドルや GitHub Release への動画アップロードは **不要** です。
+ワークフローは毎日:
 
-```bash
-# gh CLI を認証
-gh auth login
+1. `state.json` から次の話 ID を解決
+2. CI 上で `pipeline.run --id NNN` を実行 → mp4 を生成
+3. 投稿（manual or auto）
+4. 生成された mp4 をワークフロー artifact に保存（manual モード時の手動DL用）
+5. state.json を更新してコミット
 
-# 動画 ZIP → GitHub Release → リポジトリ変数 VIDEOS_BUNDLE_URL まで一括
-bash tiktok/tools/setup-github-release.sh
-```
+CI 1 回あたりの所要時間: 約 2〜3 分（ffmpeg + open_jtalk のセットアップ込み）。
 
-このスクリプトが行うこと:
-1. `tiktok/output/final/*.mp4` を `/tmp/ex_gambler_kazuki_videos.zip` に圧縮
-2. リポジトリの Release `v1.0-videos` に asset アップロード（既存なら上書き）
-3. asset の直 URL をリポジトリ変数 `VIDEOS_BUNDLE_URL` に登録
-4. 設定後の値を表示
+### 必要な設定
 
-### 残りの手動設定
-
-リポジトリ **Settings → Secrets and variables → Actions** で:
+リポジトリ **Settings → Secrets and variables → Actions**:
 
 | 種別 | 名前 | 内容 | 必須？ |
 |---|---|---|---|
-| Variable | `VIDEOS_BUNDLE_URL` | スクリプトが自動設定 | ✅ |
 | Variable | `POSTING_MODE` | `manual` or `auto`（未設定なら manual） | 任意 |
 | Secret | `TIKTOK_COOKIES_TXT` | cookies.txt の中身全文 | auto時のみ |
 | Secret | `DISCORD_WEBHOOK_URL` | 通知 Webhook URL | 強推奨 |
