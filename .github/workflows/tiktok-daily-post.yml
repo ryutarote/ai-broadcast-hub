@@ -4,16 +4,17 @@ name: TikTok daily post (@ex_gambler_kazuki)
 # all scheduled runs before LAUNCH_AT_UTC. Manual dispatch ignores the
 # gate so the operator can always force a post.
 #
+# Videos are RE-GENERATED inside the workflow from posts.json each run
+# (via the same pipeline.run that produced them locally). This removes
+# the need for a large pre-built video bundle in storage.
+#
 # Required repository secrets:
 #   TIKTOK_COOKIES_TXT     Netscape-format cookies for the TikTok account
-#                          (copy from Cookie-Editor extension)
+#                          (auto-mode only)
 #   DISCORD_WEBHOOK_URL    Optional Discord webhook for success/failure pings
 #
-# Required repository variables:
+# Required repository variable:
 #   POSTING_MODE           "auto" or "manual" (default: manual)
-#   VIDEOS_BUNDLE_URL      URL to a zip of all 31 mp4 files. The workflow
-#                          downloads & extracts it because output/final/
-#                          is gitignored.
 
 on:
   schedule:
@@ -45,28 +46,62 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       go: ${{ steps.gate.outputs.go }}
+      target: ${{ steps.gate.outputs.target }}
     steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 1 }
+
       - id: gate
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             if [ "${{ inputs.bypass_launch_gate }}" = "yes" ]; then
               echo "manual dispatch with gate bypass"
-              echo "go=true" >> "$GITHUB_OUTPUT"; exit 0
+              echo "go=true" >> "$GITHUB_OUTPUT"
+            else
+              launch=$(date -u -d "$LAUNCH_AT_UTC" +%s)
+              now=$(date -u +%s)
+              if [ "$now" -ge "$launch" ]; then
+                echo "go=true" >> "$GITHUB_OUTPUT"
+              else
+                echo "Manual dispatch BEFORE launch - blocked. Use bypass_launch_gate=yes."
+                echo "go=false" >> "$GITHUB_OUTPUT"
+              fi
+            fi
+          else
+            launch=$(date -u -d "$LAUNCH_AT_UTC" +%s)
+            now=$(date -u +%s)
+            if [ "$now" -ge "$launch" ]; then
+              echo "Past launch ($LAUNCH_AT_UTC) - proceed"
+              echo "go=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "Before launch ($LAUNCH_AT_UTC) - skipping"
+              echo "go=false" >> "$GITHUB_OUTPUT"
             fi
           fi
-          launch=$(date -u -d "$LAUNCH_AT_UTC" +%s)
-          now=$(date -u +%s)
-          if [ "$now" -ge "$launch" ]; then
-            echo "Past launch ($LAUNCH_AT_UTC) — proceed"
-            echo "go=true" >> "$GITHUB_OUTPUT"
+
+          if [ -n "${{ inputs.force_id }}" ]; then
+            echo "target=${{ inputs.force_id }}" >> "$GITHUB_OUTPUT"
           else
-            echo "Before launch ($LAUNCH_AT_UTC) — skipping"
-            echo "go=false" >> "$GITHUB_OUTPUT"
+            # Read the first un-posted ID from state.json
+            target=$(python3 - <<'PY'
+          import json, pathlib
+          p = pathlib.Path("tiktok/posting/state.json")
+          if not p.exists():
+              print("000"); raise SystemExit
+          d = json.loads(p.read_text())
+          posted = set(d.get("posted", []))
+          for q in d.get("queue", []):
+              if q not in posted:
+                  print(q); raise SystemExit
+          print("")
+          PY
+          )
+            echo "target=$target" >> "$GITHUB_OUTPUT"
           fi
 
   post:
     needs: precheck
-    if: needs.precheck.outputs.go == 'true'
+    if: needs.precheck.outputs.go == 'true' && needs.precheck.outputs.target != ''
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -81,7 +116,7 @@ jobs:
           python-version: "3.11"
           cache: "pip"
 
-      - name: Install ffmpeg + fonts (for any TTS / re-render)
+      - name: Install system deps
         run: |
           sudo apt-get update -y
           sudo apt-get install -y ffmpeg fonts-noto-cjk \
@@ -95,8 +130,18 @@ jobs:
           pip install -r requirements.txt
           pip install tiktok-uploader
 
-      - name: Materialize cookies
-        if: ${{ secrets.TIKTOK_COOKIES_TXT != '' }}
+      - name: Generate the day's video
+        working-directory: tiktok
+        env:
+          TTS_BACKEND: open_jtalk
+        run: |
+          target="${{ needs.precheck.outputs.target }}"
+          echo "Generating video for post $target"
+          python -m pipeline.run --id "$target" --skip-install
+          ls -la output/final/
+
+      - name: Materialize cookies (auto mode only)
+        if: ${{ secrets.TIKTOK_COOKIES_TXT != '' && vars.POSTING_MODE == 'auto' }}
         env:
           COOKIES: ${{ secrets.TIKTOK_COOKIES_TXT }}
         run: |
@@ -104,15 +149,7 @@ jobs:
           printf "%s" "$COOKIES" > tiktok/secrets/cookies.txt
           chmod 600 tiktok/secrets/cookies.txt
 
-      - name: Download video bundle
-        if: ${{ vars.VIDEOS_BUNDLE_URL != '' }}
-        run: |
-          mkdir -p tiktok/output/final
-          curl -fsSL "${{ vars.VIDEOS_BUNDLE_URL }}" -o /tmp/videos.zip
-          unzip -o /tmp/videos.zip -d tiktok/output/final
-          ls tiktok/output/final | head
-
-      - name: Post next video
+      - name: Post the video
         working-directory: tiktok
         env:
           POSTING_MODE: ${{ vars.POSTING_MODE || 'manual' }}
@@ -120,11 +157,7 @@ jobs:
           TIKTOK_COOKIES_PATH: ${{ github.workspace }}/tiktok/secrets/cookies.txt
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: |
-          if [ -n "${{ inputs.force_id }}" ]; then
-            python -m posting.run --id "${{ inputs.force_id }}"
-          else
-            python -m posting.run
-          fi
+          python -m posting.run --id "${{ needs.precheck.outputs.target }}"
 
       - name: Commit updated state.json
         if: always()
@@ -138,6 +171,15 @@ jobs:
             git commit -m "posting: state.json $(date -u +%Y-%m-%dT%H:%M:%SZ) [skip ci]"
             git push
           fi
+
+      - name: Upload generated video as workflow artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: posted-video-${{ needs.precheck.outputs.target }}
+          path: tiktok/output/final/${{ needs.precheck.outputs.target }}.mp4
+          if-no-files-found: ignore
+          retention-days: 30
 
       - name: Upload run log
         if: always()
