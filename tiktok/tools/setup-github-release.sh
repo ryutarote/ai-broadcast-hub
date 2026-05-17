@@ -3,14 +3,19 @@
 # register VIDEOS_BUNDLE_URL as a repository variable so the daily
 # workflow can download it.
 #
+# Two ways to provide the videos:
+#
+#   1. Build from local mp4s (default):
+#        bash tiktok/tools/setup-github-release.sh
+#      requires tiktok/output/final/*.mp4 to exist on disk.
+#
+#   2. Use an already-built ZIP (e.g. one received from Claude):
+#        ZIP_PATH=~/Downloads/ex_gambler_kazuki_videos.zip \
+#            bash tiktok/tools/setup-github-release.sh
+#      Skips repacking; uploads the file as-is.
+#
 # Prereqs:
 #   - gh CLI authenticated: `gh auth login`
-#   - The mp4 files exist under tiktok/output/final/
-#   - This script runs from the repo root or anywhere; it auto-locates
-#     the repo via the script's own path.
-#
-# Usage:
-#   bash tiktok/tools/setup-github-release.sh
 #
 # Idempotent: re-running replaces the release asset and updates the
 # variable. The release tag (v1.0-videos) is reused.
@@ -36,18 +41,34 @@ if ! gh auth status >/dev/null 2>&1; then
   exit 1
 fi
 
-videos_dir="$TIKTOK_DIR/output/final"
-count=$(find "$videos_dir" -maxdepth 1 -name '*.mp4' | wc -l)
-if [ "$count" -lt 31 ]; then
-  echo "ERROR: expected 31 mp4 files in $videos_dir, found $count" >&2
-  exit 1
-fi
-echo "==> Found $count mp4 files in $videos_dir"
+# --- 2. Resolve the ZIP: use provided one, else build from mp4s ---
+if [ -f "$ZIP_PATH" ]; then
+  echo "==> Using existing ZIP at $ZIP_PATH"
+else
+  videos_dir="$TIKTOK_DIR/output/final"
+  if [ ! -d "$videos_dir" ]; then
+    cat >&2 <<EOF
+ERROR: video source not found.
+  Looked for an existing ZIP at: $ZIP_PATH
+  And mp4 files under:            $videos_dir
 
-# --- 2. Build zip ---
-echo "==> Packing zip -> $ZIP_PATH"
-rm -f "$ZIP_PATH"
-( cd "$videos_dir" && zip -j -q "$ZIP_PATH" ./*.mp4 )
+Either:
+  - Place the ZIP at $ZIP_PATH, or set ZIP_PATH=/path/to/zip and re-run, or
+  - Place all 31 mp4 files under $videos_dir and re-run.
+EOF
+    exit 1
+  fi
+  count=$(find "$videos_dir" -maxdepth 1 -name '*.mp4' | wc -l | tr -d ' ')
+  if [ "$count" -lt 31 ]; then
+    echo "ERROR: expected 31 mp4 files in $videos_dir, found $count" >&2
+    exit 1
+  fi
+  echo "==> Found $count mp4 files in $videos_dir"
+  echo "==> Packing zip -> $ZIP_PATH"
+  rm -f "$ZIP_PATH"
+  ( cd "$videos_dir" && zip -j -q "$ZIP_PATH" ./*.mp4 )
+fi
+
 zip_size=$(du -h "$ZIP_PATH" | cut -f1)
 echo "    zip size: $zip_size"
 
@@ -64,8 +85,9 @@ else
 fi
 
 # --- 4. Resolve the asset download URL ---
+ASSET_BASENAME="$(basename "$ZIP_PATH")"
 ASSET_URL=$(gh release view "$TAG" --repo "$REPO_SLUG" --json assets \
-    --jq '.assets[] | select(.name=="'"$(basename "$ZIP_PATH")"'") | .url')
+    --jq ".assets[] | select(.name==\"$ASSET_BASENAME\") | .url")
 if [ -z "$ASSET_URL" ]; then
   echo "ERROR: failed to resolve asset URL from release $TAG" >&2
   exit 1
