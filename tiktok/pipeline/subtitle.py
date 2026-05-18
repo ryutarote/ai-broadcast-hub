@@ -48,9 +48,13 @@ _NUMBER_RE = re.compile(r"(\d[\d,\.]*[\d万円件％%パーセント円日年時
 
 
 def _highlight_numbers(text: str) -> str:
-    """Wrap numeric tokens with ASS color override for emphasis (yellow)."""
+    """Wrap numeric tokens with ASS color override for emphasis (amber).
+
+    Amber #D4A017 (BGR=&H17A0D4) replaces the earlier neon yellow so the
+    palette reads as "落ち着いた・男性的" instead of TikTok-flashy.
+    """
     def repl(m: re.Match[str]) -> str:
-        return r"{\c&H00F0FF&\b1}" + m.group(0) + r"{\c&HFFFFFF&\b0}"
+        return r"{\c&H17A0D4&\b1}" + m.group(0) + r"{\c&HFFFFFF&\b0}"
     return _NUMBER_RE.sub(repl, text)
 
 
@@ -217,10 +221,10 @@ YCbCr Matrix: TV.709
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
 Style: Telop,{font},96,&H00FFFFFF,&H000000FF,&H00000000,&H90000000,1,0,0,0,100,100,2,0,1,7,5,8,80,80,{telop_margin_v},1
 Style: Subtitle,{font},64,&H00FFFFFF,&H000000FF,&H00000000,&HB0000000,1,0,0,0,100,100,0,0,1,5,3,8,80,80,{sub_margin_v},1
-Style: CTA,{font},116,&H00000000,&H000000FF,&H00FFFFFF,&H0000F0FF,1,0,0,0,100,100,3,0,3,0,5,5,80,80,{cta_margin_v},1
-Style: Counter,{font},42,&H00C8C8C8,&H000000FF,&H00000000,&H60000000,1,0,0,0,100,100,0,0,1,3,2,9,40,40,260,1
-Style: Brand,{font},36,&H0000F0FF,&H000000FF,&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,3,2,7,40,40,210,1
-Style: Episode,{font},38,&H00FFFFFF,&H000000FF,&H00000000,&HA0000000,1,0,0,0,100,100,0,0,1,3,2,7,40,40,265,1
+Style: CTA,{font},80,&H00000000,&H000000FF,&H00FFFFFF,&H0017A0D4,1,0,0,0,100,100,3,0,3,0,5,5,80,80,{cta_margin_v},1
+Style: Counter,{font},34,&H00808080,&H000000FF,&H00000000,&H60000000,1,0,0,0,100,100,0,0,1,3,2,9,40,40,260,1
+Style: Brand,{font},28,&H00909090,&H000000FF,&H00000000,&H60000000,1,0,0,0,100,100,0,0,1,3,2,7,40,40,210,1
+Style: Episode,{font},32,&H00B0B0B0,&H000000FF,&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,3,2,7,40,40,250,1
 Style: CTAArrow,{font},88,&H00000000,&H000000FF,&H00FFFFFF,&H00000000,1,0,0,0,100,100,0,0,1,4,2,2,0,0,440,1
 
 [Events]
@@ -302,7 +306,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     if cta_text:
         cta_end = cta_offset_sec + 4.0
         safe_cta = _escape(cta_text)
-        wrapped_cta = _wrap_lines(safe_cta, max_chars=14)
+        # CTA font is 80pt: ~11 chars max per line within the 920px safe width.
+        wrapped_cta = _wrap_lines(safe_cta, max_chars=11)
         events.append(
             f"Dialogue: 5,{_ass_time(cta_offset_sec)},{_ass_time(cta_end)},"
             f"CTA,,0,0,0,,{{\\fad(250,250)\\t(0,250,\\fscx112\\fscy112)"

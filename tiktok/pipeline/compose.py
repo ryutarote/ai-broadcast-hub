@@ -126,10 +126,12 @@ def compose_video(
         capture_output=True,
     )
 
-    # 2. Mix in a richer ambient bed: A-minor pad built from 4 detuned
-    # sine layers (A2 / C3 / E3 / A3) with slow tremolo + lowpass for
-    # warmth. Sits at roughly -24 LUFS under the voice; loud enough to
-    # carry through silent CTA gaps but not compete with narration.
+    # 2. Mix in an audible ambient bed: 5-voice A-minor pad
+    #    (A1 sub / A2 / C3 / E3 / A3) with slow tremolo + warm lowpass.
+    #    Sits roughly -10 to -14 LUFS under the voice — loud enough that
+    #    the 27s of inter-line silence is no longer dead air.
+    #    Uses amix normalize=0 so input weights are honored verbatim
+    #    (default amix divides by N which made the bed inaudible).
     mixed_audio = audio_path.with_name(audio_path.stem + ".mix.wav")
     subprocess.run(
         [
@@ -138,30 +140,35 @@ def compose_video(
             "-i",
             str(padded_voice),
             "-f", "lavfi", "-t", f"{total_dur:.3f}",
-            "-i", "sine=frequency=110:sample_rate=44100",
+            "-i", "sine=frequency=55:sample_rate=44100",     # A1 sub
             "-f", "lavfi", "-t", f"{total_dur:.3f}",
-            "-i", "sine=frequency=130.81:sample_rate=44100",
+            "-i", "sine=frequency=110:sample_rate=44100",    # A2
             "-f", "lavfi", "-t", f"{total_dur:.3f}",
-            "-i", "sine=frequency=164.81:sample_rate=44100",
+            "-i", "sine=frequency=130.81:sample_rate=44100", # C3 (minor 3rd)
             "-f", "lavfi", "-t", f"{total_dur:.3f}",
-            "-i", "sine=frequency=220:sample_rate=44100",
+            "-i", "sine=frequency=164.81:sample_rate=44100", # E3 (5th)
+            "-f", "lavfi", "-t", f"{total_dur:.3f}",
+            "-i", "sine=frequency=220:sample_rate=44100",    # A3
             "-filter_complex",
             (
-                # Build the chord at low individual volumes, sum, soften.
-                "[1:a]volume=0.16[a1];"
-                "[2:a]volume=0.10[a2];"
-                "[3:a]volume=0.09[a3];"
-                "[4:a]volume=0.07[a4];"
-                "[a1][a2][a3][a4]amix=inputs=4:duration=longest:"
-                "dropout_transition=0,"
-                "tremolo=f=0.22:d=0.45,"
-                # Lowpass takes the harsh edge off the pure sines.
-                "lowpass=f=1800,"
-                # Ducks slightly so the voice still sits on top.
-                "volume=0.55,"
+                # Per-voice trim (peaks summed will not exceed 1.0).
+                "[1:a]volume=0.14[a0];"
+                "[2:a]volume=0.22[a1];"
+                "[3:a]volume=0.14[a2];"
+                "[4:a]volume=0.12[a3];"
+                "[5:a]volume=0.10[a4];"
+                "[a0][a1][a2][a3][a4]"
+                "amix=inputs=5:duration=longest:"
+                "normalize=0:dropout_transition=0,"
+                "tremolo=f=0.20:d=0.4,"
+                # Warm low-pass: takes harsh edge off pure sines.
+                "lowpass=f=1400,"
+                # Final bed gain (large because amix didn't scale).
+                "volume=1.6,"
                 "aformat=sample_fmts=s16:channel_layouts=mono[bed];"
+                # Mix bed in well below voice (0.55) but always audible.
                 "[0:a][bed]amix=inputs=2:duration=first:"
-                "weights='1 1':dropout_transition=0,"
+                "weights='1 0.55':normalize=0:dropout_transition=0,"
                 "loudnorm=I=-14:LRA=9:TP=-1.5,"
                 "aresample=44100"
             ),
@@ -198,7 +205,7 @@ def compose_video(
     progress_h = 6
     progress_bar_filter = (
         f",drawbox=x=0:y={progress_y}:w='iw*(t/{total_dur:.3f})':"
-        f"h={progress_h}:color=0x00F0FF@0.9:t=fill"
+        f"h={progress_h}:color=0x17A0D4@0.9:t=fill"
     ) if progress_bar else ""
 
     # Yellow accent divider between telop and subtitle.
@@ -210,7 +217,7 @@ def compose_video(
     divider_x = (w - divider_w) // 2
     divider_filter = (
         f",drawbox=x={divider_x}:y={divider_y}:w={divider_w}:h=4:"
-        f"color=0x00F0FF@0.85:t=fill:"
+        f"color=0x17A0D4@0.85:t=fill:"
         f"enable='lt(t,{audio_dur - 0.3:.3f})'"
     )
 
