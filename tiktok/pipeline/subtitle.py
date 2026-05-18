@@ -221,10 +221,10 @@ YCbCr Matrix: TV.709
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
 Style: Telop,{font},96,&H00FFFFFF,&H000000FF,&H00000000,&H90000000,1,0,0,0,100,100,2,0,1,7,5,8,80,80,{telop_margin_v},1
 Style: Subtitle,{font},64,&H00FFFFFF,&H000000FF,&H00000000,&HB0000000,1,0,0,0,100,100,0,0,1,5,3,8,80,80,{sub_margin_v},1
-Style: CTA,{font},80,&H00000000,&H000000FF,&H00FFFFFF,&H0017A0D4,1,0,0,0,100,100,3,0,3,0,5,5,80,80,{cta_margin_v},1
+Style: CTA,{font},92,&H00000000,&H000000FF,&H00000000,&H00000000,1,0,0,0,100,100,2,0,1,0,0,5,0,0,{cta_margin_v},1
 Style: Counter,{font},34,&H00808080,&H000000FF,&H00000000,&H60000000,1,0,0,0,100,100,0,0,1,3,2,9,40,40,260,1
-Style: Brand,{font},28,&H00909090,&H000000FF,&H00000000,&H60000000,1,0,0,0,100,100,0,0,1,3,2,7,40,40,210,1
-Style: Episode,{font},32,&H00B0B0B0,&H000000FF,&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,3,2,7,40,40,250,1
+Style: Brand,{font},30,&H00B0B0B0,&H000000FF,&H00000000,&H30000000,1,0,0,0,100,100,0,0,1,3,2,7,40,40,210,1
+Style: Episode,{font},32,&H00C0C0C0,&H000000FF,&H00000000,&H50000000,1,0,0,0,100,100,0,0,1,3,2,7,40,40,250,1
 Style: CTAArrow,{font},88,&H00000000,&H000000FF,&H00FFFFFF,&H00000000,1,0,0,0,100,100,0,0,1,4,2,2,0,0,440,1
 
 [Events]
@@ -252,19 +252,26 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     # 1. Telops (per scene) - dramatic entry: slight slide from left + scale-pop
     #    + fade. Hold for the full scene length. The entry animation is
     #    intentionally aggressive (450ms) to mark scene transitions clearly.
+    #    Scenes flagged "hero": true get 150% font scaling for max impact —
+    #    used for climactic numeric statements like "1247日目".
     for i, scene in enumerate(scenes_with_timing, start=1):
         start = scene["start"]
         end = extended_ends[i - 1]
         telop = scene.get("telop", "").strip()
+        is_hero = bool(scene.get("hero"))
         safe = _escape(telop)
         wrapped = _telop_lines(safe, max_chars=11) if telop else ""
         highlighted = _highlight_numbers(wrapped) if wrapped else ""
         # Combined effect: quick fade-in + scale pop + settle.
-        # 100ms fade-in (down from 220) so climactic scenes don't waste time.
+        # Hero variant settles at 200% (2x) so a single-number telop like
+        # "1247日目" reads as the visual centerpiece of the slide.
+        settle_scale = 200 if is_hero else 100
+        pop_scale = settle_scale + 18
         effect = (
-            "{\\fad(100,140)"
-            "\\t(0,80,\\fscx118\\fscy118\\frz-2)"
-            "\\t(80,280,\\fscx100\\fscy100\\frz0)"
+            "{"
+            "\\fad(100,140)"
+            f"\\t(0,80,\\fscx{pop_scale}\\fscy{pop_scale}\\frz-2)"
+            f"\\t(80,280,\\fscx{settle_scale}\\fscy{settle_scale}\\frz0)"
             "}"
         )
         if telop:
@@ -302,15 +309,22 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 f"Subtitle,,0,0,0,,{sub_effect}{highlighted}"
             )
 
-    # 3. CTA card (last 4s) + animated "↑" arrow pointing to TikTok profile
+    # 3. CTA card (last 4s) + animated "↑" arrow pointing to TikTok profile.
+    # When the CTA contains "／" markers we honor them as explicit line
+    # breaks (each segment becomes its own centered line). Otherwise we fall
+    # back to char-count wrapping.
     if cta_text:
         cta_end = cta_offset_sec + 4.0
         safe_cta = _escape(cta_text)
-        # CTA font is 80pt: ~11 chars max per line within the 920px safe width.
-        wrapped_cta = _wrap_lines(safe_cta, max_chars=11)
+        if "／" in safe_cta:
+            segments = [s.strip() for s in safe_cta.split("／") if s.strip()]
+            wrapped_cta = r"\N".join(segments)
+        else:
+            # CTA font is 92pt: ~10 chars max per line.
+            wrapped_cta = _wrap_lines(safe_cta, max_chars=10)
         events.append(
             f"Dialogue: 5,{_ass_time(cta_offset_sec)},{_ass_time(cta_end)},"
-            f"CTA,,0,0,0,,{{\\fad(250,250)\\t(0,250,\\fscx112\\fscy112)"
+            f"CTA,,0,0,0,,{{\\fad(250,250)\\t(0,250,\\fscx108\\fscy108)"
             f"\\t(250,520,\\fscx100\\fscy100)}}{wrapped_cta}"
         )
         # Pulsing arrow drawing attention to the profile (top of screen).

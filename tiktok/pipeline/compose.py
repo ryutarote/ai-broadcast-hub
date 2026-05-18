@@ -169,7 +169,10 @@ def compose_video(
                 # Mix bed in well below voice (0.55) but always audible.
                 "[0:a][bed]amix=inputs=2:duration=first:"
                 "weights='1 0.55':normalize=0:dropout_transition=0,"
-                "loudnorm=I=-14:LRA=9:TP=-1.5,"
+                # Slightly gentler than before: LRA 9->12 lets the voice
+                # breathe instead of being clamped flat; TP -1.5->-2.0
+                # gives extra peak headroom so it doesn't sound squashed.
+                "loudnorm=I=-14:LRA=12:TP=-2.0,"
                 "aresample=44100"
             ),
             "-ac", "1",
@@ -205,7 +208,7 @@ def compose_video(
     progress_h = 6
     progress_bar_filter = (
         f",drawbox=x=0:y={progress_y}:w='iw*(t/{total_dur:.3f})':"
-        f"h={progress_h}:color=0x17A0D4@0.9:t=fill"
+        f"h={progress_h}:color=0xD4A017@0.9:t=fill"
     ) if progress_bar else ""
 
     # Yellow accent divider between telop and subtitle.
@@ -217,7 +220,7 @@ def compose_video(
     divider_x = (w - divider_w) // 2
     divider_filter = (
         f",drawbox=x={divider_x}:y={divider_y}:w={divider_w}:h=4:"
-        f"color=0x17A0D4@0.85:t=fill:"
+        f"color=0xD4A017@0.85:t=fill:"
         f"enable='lt(t,{audio_dur - 0.3:.3f})'"
     )
 
@@ -247,12 +250,24 @@ def compose_video(
     side_bars_filter = ""
     brand_filter = ""
 
+    # Full-width amber CTA band drawn behind the CTA text. Active only
+    # during the CTA window (audio_dur .. audio_dur + 4s). 3 lines of
+    # 92pt text = ~380px tall; band is sized to comfortably contain it.
+    cta_band_h = 420
+    cta_band_y = h // 2 - cta_band_h // 2 - 40
+    cta_band_filter = (
+        f",drawbox=x=0:y={cta_band_y}:w={w}:h={cta_band_h}:"
+        f"color=0xD4A017@1.0:t=fill:"
+        f"enable='gte(t,{audio_dur:.3f})'"
+    )
+
     vf = (
         f"scale={int(w*1.15)}:{int(h*1.15)}:flags=lanczos,"
         f"zoompan=z='{zoom_expr}':d={n_frames}:s={w}x{h}:fps={fps}"
         f"{top_band_filter}"
         f"{bottom_band_filter}"
         f"{side_bars_filter}"
+        f"{cta_band_filter}"
         f",ass='{ass_path_escaped}'"
         f"{divider_filter}"
         f"{brand_filter}"
