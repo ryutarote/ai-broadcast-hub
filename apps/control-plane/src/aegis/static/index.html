@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Aegis Control Plane (MVP)</title>
+    <link rel="stylesheet" href="/static/style.css" />
+  </head>
+  <body>
+    <header>
+      <h1>Aegis Control Plane <small>MVP</small></h1>
+      <div class="admin">
+        <label>Admin Token:
+          <input id="adminToken" type="password" placeholder="dev-admin-token" />
+        </label>
+        <button id="adminSave">保存</button>
+        <span id="adminStatus" class="muted"></span>
+      </div>
+    </header>
+
+    <main>
+      <section class="card">
+        <h2>1. テナント作成</h2>
+        <form id="tenantForm">
+          <label>社名 <input name="name" required placeholder="株式会社サンプル" /></label>
+          <label>連絡先メール <input name="contact_email" type="email" required placeholder="cto@example.co.jp" /></label>
+          <label>プラン
+            <select name="plan">
+              <option value="lite">Lite (¥30,000/月)</option>
+              <option value="standard" selected>Standard (¥100,000/月)</option>
+              <option value="pro">Pro (¥300,000/月)</option>
+            </select>
+          </label>
+          <label>日次予算 (JPY) <input name="daily_budget_jpy" type="number" value="50000" /></label>
+          <label>月次予算 (JPY) <input name="monthly_budget_jpy" type="number" value="500000" /></label>
+          <button type="submit">作成</button>
+        </form>
+        <pre id="tenantOut" class="result"></pre>
+      </section>
+
+      <section class="card">
+        <h2>2. テナント一覧 / 選択</h2>
+        <button id="refreshTenants">再読込</button>
+        <table id="tenantsTable">
+          <thead><tr><th>選択</th><th>ID</th><th>社名</th><th>プラン</th><th>状態</th><th>日次予算</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </section>
+
+      <section class="card">
+        <h2>3. APIキー発行</h2>
+        <p class="muted">対象テナント: <span id="selectedTenantLabel">未選択</span></p>
+        <form id="keyForm">
+          <label>ラベル <input name="label" placeholder="本番用、開発用 等" /></label>
+          <button type="submit" id="keyCreateBtn" disabled>キー発行</button>
+        </form>
+        <pre id="keyOut" class="result"></pre>
+        <table id="keysTable">
+          <thead><tr><th>Prefix</th><th>Label</th><th>作成</th><th>失効</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </section>
+
+      <section class="card">
+        <h2>4. LLMイベント送信（プロキシ模擬）</h2>
+        <p class="muted">テナントAPIキーを使い、観測イベントを送信します。</p>
+        <form id="eventForm">
+          <label>APIキー (aeg_live_...) <input name="apiKey" required /></label>
+          <label>Provider
+            <select name="provider">
+              <option>anthropic</option>
+              <option>openai</option>
+              <option>bedrock</option>
+              <option>gemini</option>
+            </select>
+          </label>
+          <label>Model <input name="model" value="claude-opus-4-7" required /></label>
+          <label>UserLabel <input name="user_label" placeholder="営業/サポート等" /></label>
+          <label>Prompt tokens <input name="prompt_tokens" type="number" value="800" required /></label>
+          <label>Completion tokens <input name="completion_tokens" type="number" value="400" required /></label>
+          <label>Cost (JPY) <input name="total_cost_jpy" type="number" step="0.0001" value="2.5" required /></label>
+          <label>Latency ms <input name="latency_ms" type="number" value="1500" required /></label>
+          <label>Status code <input name="status_code" type="number" value="200" required /></label>
+          <label>PII検知
+            <select name="pii_detected">
+              <option value="false">なし</option>
+              <option value="true">あり</option>
+            </select>
+          </label>
+          <button type="submit">イベント送信</button>
+          <button type="button" id="burstButton">10連投（コスト超過テスト用）</button>
+        </form>
+        <pre id="eventOut" class="result"></pre>
+      </section>
+
+      <section class="card">
+        <h2>5. 利用状況サマリー</h2>
+        <button id="fetchUsage">取得</button>
+        <pre id="usageOut" class="result"></pre>
+      </section>
+
+      <section class="card">
+        <h2>6. コスト</h2>
+        <button id="fetchCost">取得</button>
+        <div id="costView"></div>
+        <pre id="costOut" class="result"></pre>
+      </section>
+
+      <section class="card">
+        <h2>7. アラート</h2>
+        <button id="fetchAlerts">取得</button>
+        <table id="alertsTable">
+          <thead><tr><th>時刻</th><th>種別</th><th>重大度</th><th>メッセージ</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </section>
+    </main>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>

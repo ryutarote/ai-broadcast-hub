@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+.venv/
+aegis_dev.db
+aegis_dev.db-journal
+*.sqlite
+*.sqlite-journal
+.env
