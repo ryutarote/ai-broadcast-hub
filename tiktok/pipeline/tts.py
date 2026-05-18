@@ -83,11 +83,16 @@ _NUM_RE = __import__("re").compile(r"\d{1,9}(?:,\d{3})*")
 
 
 def _normalize_for_tts(text: str) -> str:
-    """Replace Arabic numerals with kanji so Open JTalk reads them naturally.
+    """Normalize a script line before sending it to TTS.
 
-    Display text in the video keeps the original digits (more readable);
-    only the synthesis input is rewritten.
+    - Strips ``／`` markers (used as forced line-break hints for the
+      subtitle layer; they should not be read aloud).
+    - Replaces Arabic numerals with kanji so Open JTalk reads them
+      naturally. Display text in the video keeps the original digits.
     """
+    # ／ is a subtitle-only break marker; TTS must not pronounce it.
+    text = text.replace("／", "")
+
     def repl(m):
         digits = m.group(0).replace(",", "")
         try:

@@ -280,16 +280,24 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
     # 2. Subtitles per narration line - quick slide-up entry, with each
     #    subtitle held until the next one starts (or scene ends).
+    #    "／" in a narration line is treated as a forced line break
+    #    (passed through to the subtitle but stripped from TTS upstream).
     for s_i, scene in enumerate(scenes_with_timing):
         subs = scene.get("subtitles", [])
         for j, sub in enumerate(subs):
-            # End at the next subtitle start (or the scene's extended end).
             if j + 1 < len(subs):
                 end_time = subs[j + 1]["start"]
             else:
                 end_time = extended_ends[s_i]
             safe = _escape(sub["text"].strip().rstrip("。"))
-            wrapped = _wrap_lines(safe)
+            if "／" in safe:
+                # Honor the author's explicit break(s); each segment is
+                # wrapped independently to fit the safe width.
+                segments = [s.strip() for s in safe.split("／") if s.strip()]
+                wrapped_segments = [_wrap_lines(s) for s in segments]
+                wrapped = r"\N".join(wrapped_segments)
+            else:
+                wrapped = _wrap_lines(safe)
             highlighted = _highlight_numbers(wrapped)
             sub_effect = (
                 "{\\fad(140,180)"
