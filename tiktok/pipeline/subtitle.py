@@ -48,13 +48,13 @@ _NUMBER_RE = re.compile(r"(\d[\d,\.]*[\d万円件％%パーセント円日年時
 
 
 def _highlight_numbers(text: str) -> str:
-    """Wrap numeric tokens with ASS color override for emphasis (amber).
+    """Wrap numeric tokens with ASS color override for emphasis (vermillion).
 
-    Amber #D4A017 (BGR=&H17A0D4) replaces the earlier neon yellow so the
-    palette reads as "落ち着いた・男性的" instead of TikTok-flashy.
+    Vermillion #E14F1F (BGR=&H1F4FE1) — pachinko ドル箱 / warning color
+    signaling "this is the ギャンブル脱出 niche" to anyone scrolling FYP.
     """
     def repl(m: re.Match[str]) -> str:
-        return r"{\c&H17A0D4&\b1}" + m.group(0) + r"{\c&HFFFFFF&\b0}"
+        return r"{\c&H1F4FE1&\b1}" + m.group(0) + r"{\c&HFFFFFF&\b0}"
     return _NUMBER_RE.sub(repl, text)
 
 
@@ -222,7 +222,7 @@ Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour,
 Style: Telop,{font},96,&H00FFFFFF,&H000000FF,&H00000000,&H90000000,1,0,0,0,100,100,2,0,1,7,5,8,80,80,{telop_margin_v},1
 Style: Subtitle,{font},64,&H00FFFFFF,&H000000FF,&H00000000,&HB0000000,1,0,0,0,100,100,0,0,1,5,3,8,80,80,{sub_margin_v},1
 Style: CTA,{font},92,&H00000000,&H000000FF,&H00000000,&H00000000,1,0,0,0,100,100,2,0,1,0,0,5,0,0,{cta_margin_v},1
-Style: DayCounter,{font},42,&H0017A0D4,&H000000FF,&H00000000,&H40000000,1,0,0,0,100,100,0,0,1,3,2,7,40,40,210,1
+Style: DayCounter,{font},42,&H001F4FE1,&H000000FF,&H00000000,&H40000000,1,0,0,0,100,100,0,0,1,3,2,7,40,40,210,1
 Style: CTAArrow,{font},88,&H00000000,&H000000FF,&H00FFFFFF,&H00000000,1,0,0,0,100,100,0,0,1,4,2,2,0,0,440,1
 
 [Events]

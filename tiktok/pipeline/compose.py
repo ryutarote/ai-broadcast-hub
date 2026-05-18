@@ -208,7 +208,7 @@ def compose_video(
     progress_h = 6
     progress_bar_filter = (
         f",drawbox=x=0:y={progress_y}:w='iw*(t/{total_dur:.3f})':"
-        f"h={progress_h}:color=0xD4A017@0.9:t=fill"
+        f"h={progress_h}:color=0xE14F1F@0.9:t=fill"
     ) if progress_bar else ""
 
     # Yellow accent divider between telop and subtitle.
@@ -220,7 +220,7 @@ def compose_video(
     divider_x = (w - divider_w) // 2
     divider_filter = (
         f",drawbox=x={divider_x}:y={divider_y}:w={divider_w}:h=4:"
-        f"color=0xD4A017@0.85:t=fill:"
+        f"color=0xE14F1F@0.85:t=fill:"
         f"enable='lt(t,{audio_dur - 0.3:.3f})'"
     )
 
@@ -257,7 +257,7 @@ def compose_video(
     cta_band_y = h // 2 - cta_band_h // 2 - 40
     cta_band_filter = (
         f",drawbox=x=0:y={cta_band_y}:w={w}:h={cta_band_h}:"
-        f"color=0xD4A017@1.0:t=fill:"
+        f"color=0xE14F1F@1.0:t=fill:"
         f"enable='gte(t,{audio_dur:.3f})'"
     )
 
