@@ -75,6 +75,7 @@ def synthesize_post_audio(post: dict, tts: AivisTTS) -> tuple[Path, list[dict]]:
         scenes_timing.append(
             {
                 "telop": scene.get("telop", ""),
+                "hero": bool(scene.get("hero")),
                 "start": scene_start,
                 "end": cursor - SCENE_GAP_SEC,
                 "subtitles": subtitles,

@@ -83,11 +83,16 @@ _NUM_RE = __import__("re").compile(r"\d{1,9}(?:,\d{3})*")
 
 
 def _normalize_for_tts(text: str) -> str:
-    """Replace Arabic numerals with kanji so Open JTalk reads them naturally.
+    """Normalize a script line before sending it to TTS.
 
-    Display text in the video keeps the original digits (more readable);
-    only the synthesis input is rewritten.
+    - Strips ``／`` markers (used as forced line-break hints for the
+      subtitle layer; they should not be read aloud).
+    - Replaces Arabic numerals with kanji so Open JTalk reads them
+      naturally. Display text in the video keeps the original digits.
     """
+    # ／ is a subtitle-only break marker; TTS must not pronounce it.
+    text = text.replace("／", "")
+
     def repl(m):
         digits = m.group(0).replace(",", "")
         try:
@@ -284,8 +289,13 @@ class AivisTTS:
             raise AivisTTSError(
                 f"Open JTalk failed: rc={proc.returncode} {proc.stderr}"
             )
-        # Normalize loudness to ~ -16 LUFS via ffmpeg (consistency for compose).
-        normalized = output_path.with_suffix(".norm.wav")
+        # Trim leading/trailing silence from the raw TTS so the per-line
+        # duration we measure (and use to time subtitles) reflects actual
+        # speech onset, not the synth's silence padding. Without this the
+        # subtitle for line N+1 changes BEFORE the next speech starts —
+        # users perceive that as "audio out of sync with slides".
+        # Then normalize loudness for consistency with the compose stage.
+        cleaned = output_path.with_suffix(".clean.wav")
         subprocess.run(
             [
                 "ffmpeg",
@@ -293,13 +303,25 @@ class AivisTTS:
                 "-i",
                 str(output_path),
                 "-af",
-                "loudnorm=I=-16:LRA=11:TP=-1.5,aresample=44100",
+                # silenceremove: strip silence ≥ 0.05s at <-45dB from
+                # both ends. loudnorm: normalize so the bed mix lands
+                # consistently regardless of input level.
+                (
+                    "silenceremove=start_periods=1:start_silence=0.05:"
+                    "start_threshold=-45dB:detection=peak,"
+                    "areverse,"
+                    "silenceremove=start_periods=1:start_silence=0.05:"
+                    "start_threshold=-45dB:detection=peak,"
+                    "areverse,"
+                    "loudnorm=I=-16:LRA=11:TP=-1.5,"
+                    "aresample=44100"
+                ),
                 "-ac",
                 "1",
-                str(normalized),
+                str(cleaned),
             ],
             check=True,
             capture_output=True,
         )
-        normalized.replace(output_path)
+        cleaned.replace(output_path)
         return output_path
