@@ -222,9 +222,7 @@ Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour,
 Style: Telop,{font},96,&H00FFFFFF,&H000000FF,&H00000000,&H90000000,1,0,0,0,100,100,2,0,1,7,5,8,80,80,{telop_margin_v},1
 Style: Subtitle,{font},64,&H00FFFFFF,&H000000FF,&H00000000,&HB0000000,1,0,0,0,100,100,0,0,1,5,3,8,80,80,{sub_margin_v},1
 Style: CTA,{font},92,&H00000000,&H000000FF,&H00000000,&H00000000,1,0,0,0,100,100,2,0,1,0,0,5,0,0,{cta_margin_v},1
-Style: Counter,{font},34,&H00808080,&H000000FF,&H00000000,&H60000000,1,0,0,0,100,100,0,0,1,3,2,9,40,40,260,1
-Style: Brand,{font},30,&H00B0B0B0,&H000000FF,&H00000000,&H30000000,1,0,0,0,100,100,0,0,1,3,2,7,40,40,210,1
-Style: Episode,{font},32,&H00C0C0C0,&H000000FF,&H00000000,&H50000000,1,0,0,0,100,100,0,0,1,3,2,7,40,40,250,1
+Style: DayCounter,{font},42,&H0017A0D4,&H000000FF,&H00000000,&H40000000,1,0,0,0,100,100,0,0,1,3,2,7,40,40,210,1
 Style: CTAArrow,{font},88,&H00000000,&H000000FF,&H00FFFFFF,&H00000000,1,0,0,0,100,100,0,0,1,4,2,2,0,0,440,1
 
 [Events]
@@ -279,11 +277,6 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 f"Dialogue: 2,{_ass_time(start)},{_ass_time(end)},Telop,,0,0,0,,"
                 f"{effect}{highlighted}"
             )
-        # Scene counter top-right.
-        events.append(
-            f"Dialogue: 1,{_ass_time(start)},{_ass_time(end)},Counter,,0,0,0,,"
-            f"{{\\fad(180,180)}}{i} / {total_scenes}"
-        )
 
     # 2. Subtitles per narration line - quick slide-up entry, with each
     #    subtitle held until the next one starts (or scene ends).
@@ -336,22 +329,18 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             f"}}↑ プロフィールへ"
         )
 
-    # 4. Brand tag + episode badge (permanent, top-left, stacked).
+    # 4. Day-counter tag (permanent, top-left). Replaces the old
+    #    "卒業計画" brand wordmark — per reviewer, the authority signal
+    #    of "1247日目" is the strongest possible always-on element for
+    #    a Pachi-Sotsu account. Whatever the channel's current 卒業
+    #    day-count is, put it here.
     last_t = scenes_with_timing[-1]["end"] if scenes_with_timing else 0
     end_t = last_t + 5
+    counter_text = "卒業 1247日目"  # update via posts.json "day_counter" if needed
     events.append(
-        f"Dialogue: 0,{_ass_time(0)},{_ass_time(end_t)},Brand,,0,0,0,,"
-        f"{{\\fad(400,200)}}卒業計画"
+        f"Dialogue: 0,{_ass_time(0)},{_ass_time(end_t)},DayCounter,,0,0,0,,"
+        f"{{\\fad(400,200)}}{counter_text}"
     )
-    if episode and episode > 0:
-        # Render as "第N話 · <arc>" if arc supplied, else just "第N話".
-        label = f"第{episode}話"
-        if arc:
-            label += f" · {_escape(arc)}"
-        events.append(
-            f"Dialogue: 0,{_ass_time(0)},{_ass_time(end_t)},Episode,,0,0,0,,"
-            f"{{\\fad(500,200)}}{label}"
-        )
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(header + "\n".join(events) + "\n", encoding="utf-8")
