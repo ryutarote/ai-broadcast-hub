@@ -9,7 +9,11 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from ..deps import get_tenant_by_api_key
+from ..deps import (
+    get_active_tenant_by_api_key,
+    get_tenant_by_api_key,
+    get_tenant_by_api_key_incl_suspended,
+)
 from ..db import get_db
 from ..models import Alert, LlmEvent, Tenant
 from ..schemas import (
@@ -37,12 +41,14 @@ router = APIRouter(tags=["events"])
 )
 def ingest_event(
     payload: LlmEventIngest,
-    tenant: Tenant = Depends(get_tenant_by_api_key),
+    tenant: Tenant = Depends(get_active_tenant_by_api_key),
     db: Session = Depends(get_db),
 ) -> LlmEvent:
     event = LlmEvent(
         tenant_id=tenant.id,
         provider=payload.provider,
+        primary_provider=payload.primary_provider,
+        failover_reason=payload.failover_reason,
         model=payload.model,
         user_label=payload.user_label,
         prompt_tokens=payload.prompt_tokens,
@@ -197,7 +203,7 @@ def cost_breakdown(
 
 @router.get("/api/alerts", response_model=list[AlertOut])
 def list_alerts(
-    tenant: Tenant = Depends(get_tenant_by_api_key),
+    tenant: Tenant = Depends(get_tenant_by_api_key_incl_suspended),
     db: Session = Depends(get_db),
 ) -> list[Alert]:
     return (
@@ -212,6 +218,9 @@ def list_alerts(
 # ---------------------------------------------------------------------------
 # Alert evaluation (synchronous, called after each ingest for MVP)
 # ---------------------------------------------------------------------------
+
+
+AUTO_SUSPEND_PCT = 200.0
 
 
 def _evaluate_alerts(db: Session, tenant: Tenant, event: LlmEvent) -> None:
@@ -229,7 +238,7 @@ def _evaluate_alerts(db: Session, tenant: Tenant, event: LlmEvent) -> None:
             payload={"event_id": event.id, "entities": event.pii_entities},
         )
 
-    # 2) Daily budget thresholds
+    # 2) Daily budget thresholds + auto-suspend at 200%
     today_cost = Decimal(
         db.query(func.coalesce(func.sum(LlmEvent.total_cost_jpy), 0))
         .filter(
@@ -241,6 +250,15 @@ def _evaluate_alerts(db: Session, tenant: Tenant, event: LlmEvent) -> None:
     )
     if tenant.daily_budget_jpy:
         pct = float(today_cost) / tenant.daily_budget_jpy * 100
+        if pct >= 80:
+            _maybe_fire(
+                db,
+                tenant,
+                type_="cost_threshold_80",
+                severity="warn",
+                message=f"Daily budget 80% reached: ¥{today_cost:.0f} / ¥{tenant.daily_budget_jpy}",
+                payload={"pct": pct},
+            )
         if pct >= 100:
             _maybe_fire(
                 db,
@@ -250,14 +268,19 @@ def _evaluate_alerts(db: Session, tenant: Tenant, event: LlmEvent) -> None:
                 message=f"Daily budget exceeded: ¥{today_cost:.0f} / ¥{tenant.daily_budget_jpy}",
                 payload={"pct": pct},
             )
-        elif pct >= 80:
+        if pct >= AUTO_SUSPEND_PCT and tenant.status == "active":
+            tenant.status = "suspended"
+            db.add(tenant)
             _maybe_fire(
                 db,
                 tenant,
-                type_="cost_threshold_80",
-                severity="warn",
-                message=f"Daily budget 80% reached: ¥{today_cost:.0f} / ¥{tenant.daily_budget_jpy}",
-                payload={"pct": pct},
+                type_="auto_suspend",
+                severity="critical",
+                message=(
+                    f"Tenant auto-suspended: daily cost ¥{today_cost:.0f} "
+                    f"reached {pct:.0f}% of budget ¥{tenant.daily_budget_jpy}"
+                ),
+                payload={"pct": pct, "cost": float(today_cost)},
             )
 
     # 3) Error rate
@@ -269,6 +292,24 @@ def _evaluate_alerts(db: Session, tenant: Tenant, event: LlmEvent) -> None:
             severity="warn",
             message=f"Provider returned {event.status_code} ({event.error_type})",
             payload={"event_id": event.id},
+        )
+
+    # 4) Provider failover
+    if event.primary_provider and event.primary_provider != event.provider:
+        _maybe_fire(
+            db,
+            tenant,
+            type_="provider_failover",
+            severity="warn",
+            message=(
+                f"Failover {event.primary_provider}→{event.provider} "
+                f"({event.failover_reason or 'unspecified'})"
+            ),
+            payload={
+                "from": event.primary_provider,
+                "to": event.provider,
+                "reason": event.failover_reason,
+            },
         )
 
 

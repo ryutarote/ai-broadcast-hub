@@ -11,7 +11,16 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from .db import init_db
-from .routes import api_keys, events, health, tenants
+from .routes import (
+    analytics,
+    api_keys,
+    deletion,
+    events,
+    exports,
+    health,
+    reports,
+    tenants,
+)
 
 
 @asynccontextmanager
@@ -38,6 +47,11 @@ app.include_router(health.router)
 app.include_router(tenants.router)
 app.include_router(api_keys.router)
 app.include_router(events.router)
+app.include_router(analytics.router)
+app.include_router(exports.router)
+app.include_router(reports.admin_router)
+app.include_router(reports.tenant_router)
+app.include_router(deletion.router)
 
 
 STATIC_DIR = Path(__file__).parent / "static"

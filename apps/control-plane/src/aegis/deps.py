@@ -10,11 +10,12 @@ from .db import get_db
 from .models import ApiKey, Tenant
 
 
-def get_tenant_by_api_key(
-    authorization: str | None = Header(default=None),
-    db: Session = Depends(get_db),
+def _resolve_tenant(
+    authorization: str | None,
+    db: Session,
+    *,
+    allowed_statuses: set[str],
 ) -> Tenant:
-    """Resolve current tenant via `Authorization: Bearer <key>`."""
     if not authorization or not authorization.lower().startswith("bearer "):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -38,9 +39,31 @@ def get_tenant_by_api_key(
             detail="invalid api key",
         )
     tenant = db.get(Tenant, api_key.tenant_id)
-    if tenant is None or tenant.status != "active":
+    if tenant is None or tenant.status not in allowed_statuses:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="tenant suspended or missing",
+            detail=f"tenant not available (status={tenant.status if tenant else 'missing'})",
         )
     return tenant
+
+
+def get_tenant_by_api_key(
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+) -> Tenant:
+    """Resolve tenant (active only). Default for read & write endpoints."""
+    return _resolve_tenant(authorization, db, allowed_statuses={"active"})
+
+
+# Backwards-compat alias for endpoints that explicitly require active.
+get_active_tenant_by_api_key = get_tenant_by_api_key
+
+
+def get_tenant_by_api_key_incl_suspended(
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+) -> Tenant:
+    """Allow active + suspended (used for alerts so suspended tenants can read why)."""
+    return _resolve_tenant(
+        authorization, db, allowed_statuses={"active", "suspended"}
+    )

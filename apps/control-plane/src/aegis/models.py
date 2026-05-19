@@ -80,6 +80,8 @@ class LlmEvent(Base):
         ForeignKey("tenants.id", ondelete="CASCADE"), index=True
     )
     provider: Mapped[str] = mapped_column(String(50), nullable=False)
+    primary_provider: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    failover_reason: Mapped[str | None] = mapped_column(String(100), nullable=True)
     model: Mapped[str] = mapped_column(String(100), nullable=False)
     user_label: Mapped[str | None] = mapped_column(String(100), nullable=True)
     prompt_tokens: Mapped[int] = mapped_column(Integer, default=0)
@@ -96,6 +98,18 @@ class LlmEvent(Base):
     occurred_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow, index=True)
 
     tenant: Mapped[Tenant] = relationship(back_populates="events")
+
+
+class Report(Base):
+    __tablename__ = "reports"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    tenant_id: Mapped[str] = mapped_column(
+        ForeignKey("tenants.id", ondelete="CASCADE"), index=True
+    )
+    period: Mapped[str] = mapped_column(String(7), nullable=False, index=True)
+    summary: Mapped[dict] = mapped_column(JSON, nullable=False)
+    generated_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
 
 class Alert(Base):

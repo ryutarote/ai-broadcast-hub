@@ -83,6 +83,8 @@ class LlmEventIngest(BaseModel):
     """A simulated event posted by the LiteLLM proxy."""
 
     provider: str = Field(min_length=1, max_length=50)
+    primary_provider: str | None = Field(default=None, max_length=50)
+    failover_reason: str | None = Field(default=None, max_length=100)
     model: str = Field(min_length=1, max_length=100)
     user_label: str | None = Field(default=None, max_length=100)
     prompt_tokens: int = Field(ge=0)
@@ -102,6 +104,8 @@ class LlmEventOut(BaseModel):
     id: str
     tenant_id: str
     provider: str
+    primary_provider: str | None
+    failover_reason: str | None
     model: str
     user_label: str | None
     prompt_tokens: int
@@ -166,3 +170,91 @@ class AlertOut(BaseModel):
     payload: dict | None
     fired_at: datetime
     resolved_at: datetime | None
+
+
+# ---------------------------------------------------------------------------
+# Model comparison / failover / user-label / reports / deletion
+# ---------------------------------------------------------------------------
+
+
+class ModelMetrics(BaseModel):
+    model: str
+    requests: int
+    total_cost_jpy: Decimal
+    avg_cost_jpy: Decimal
+    avg_latency_ms: float
+    error_rate: float
+    total_prompt_tokens: int
+    total_completion_tokens: int
+
+
+class ModelCompare(BaseModel):
+    a: ModelMetrics
+    b: ModelMetrics
+    cost_delta_pct: float
+    latency_delta_pct: float
+
+
+class FailoverSummary(BaseModel):
+    total_failovers: int
+    from_provider: dict[str, int]
+    to_provider: dict[str, int]
+    reasons: dict[str, int]
+
+
+class UserLabelRow(BaseModel):
+    user_label: str
+    requests: int
+    total_cost_jpy: Decimal
+    total_tokens: int
+
+
+class UserLabelBreakdown(BaseModel):
+    tenant_id: str
+    items: list[UserLabelRow]
+    total_cost_jpy: Decimal
+    total_requests: int
+
+
+class ReportCreateRequest(BaseModel):
+    period: str = Field(pattern=r"^\d{4}-\d{2}$")
+
+
+class ReportSummary(BaseModel):
+    total_requests: int
+    error_requests: int
+    total_cost_jpy: Decimal
+    total_prompt_tokens: int
+    total_completion_tokens: int
+    avg_latency_ms: float
+    pii_detection_rate: float
+    by_model: dict[str, dict]
+    by_user_label: dict[str, dict]
+    alerts_count: int
+
+
+class ReportOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    tenant_id: str
+    period: str
+    summary: dict
+    generated_at: datetime
+
+
+class DeletionRequest(BaseModel):
+    confirm_name: str
+    reason: str = Field(min_length=1, max_length=200)
+
+
+class DeletionCertificate(BaseModel):
+    tenant_id: str
+    tenant_name: str
+    events_deleted: int
+    api_keys_deleted: int
+    alerts_deleted: int
+    reports_deleted: int
+    reason: str
+    deleted_at: datetime
+    sha256: str
