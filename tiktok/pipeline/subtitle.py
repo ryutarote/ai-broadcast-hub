@@ -48,9 +48,13 @@ _NUMBER_RE = re.compile(r"(\d[\d,\.]*[\d万円件％%パーセント円日年時
 
 
 def _highlight_numbers(text: str) -> str:
-    """Wrap numeric tokens with ASS color override for emphasis (yellow)."""
+    """Wrap numeric tokens with ASS color override for emphasis (vermillion).
+
+    Vermillion #E14F1F (BGR=&H1F4FE1) — pachinko ドル箱 / warning color
+    signaling "this is the ギャンブル脱出 niche" to anyone scrolling FYP.
+    """
     def repl(m: re.Match[str]) -> str:
-        return r"{\c&H00F0FF&\b1}" + m.group(0) + r"{\c&HFFFFFF&\b0}"
+        return r"{\c&H1F4FE1&\b1}" + m.group(0) + r"{\c&HFFFFFF&\b0}"
     return _NUMBER_RE.sub(repl, text)
 
 
@@ -217,10 +221,8 @@ YCbCr Matrix: TV.709
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
 Style: Telop,{font},96,&H00FFFFFF,&H000000FF,&H00000000,&H90000000,1,0,0,0,100,100,2,0,1,7,5,8,80,80,{telop_margin_v},1
 Style: Subtitle,{font},64,&H00FFFFFF,&H000000FF,&H00000000,&HB0000000,1,0,0,0,100,100,0,0,1,5,3,8,80,80,{sub_margin_v},1
-Style: CTA,{font},116,&H00000000,&H000000FF,&H00FFFFFF,&H0000F0FF,1,0,0,0,100,100,3,0,3,0,5,5,80,80,{cta_margin_v},1
-Style: Counter,{font},42,&H00C8C8C8,&H000000FF,&H00000000,&H60000000,1,0,0,0,100,100,0,0,1,3,2,9,40,40,260,1
-Style: Brand,{font},36,&H0000F0FF,&H000000FF,&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,3,2,7,40,40,210,1
-Style: Episode,{font},38,&H00FFFFFF,&H000000FF,&H00000000,&HA0000000,1,0,0,0,100,100,0,0,1,3,2,7,40,40,265,1
+Style: CTA,{font},92,&H00000000,&H000000FF,&H00000000,&H00000000,1,0,0,0,100,100,2,0,1,0,0,5,0,0,{cta_margin_v},1
+Style: DayCounter,{font},42,&H001F4FE1,&H000000FF,&H00000000,&H40000000,1,0,0,0,100,100,0,0,1,3,2,7,40,40,210,1
 Style: CTAArrow,{font},88,&H00000000,&H000000FF,&H00FFFFFF,&H00000000,1,0,0,0,100,100,0,0,1,4,2,2,0,0,440,1
 
 [Events]
@@ -248,19 +250,26 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     # 1. Telops (per scene) - dramatic entry: slight slide from left + scale-pop
     #    + fade. Hold for the full scene length. The entry animation is
     #    intentionally aggressive (450ms) to mark scene transitions clearly.
+    #    Scenes flagged "hero": true get 150% font scaling for max impact —
+    #    used for climactic numeric statements like "1247日目".
     for i, scene in enumerate(scenes_with_timing, start=1):
         start = scene["start"]
         end = extended_ends[i - 1]
         telop = scene.get("telop", "").strip()
+        is_hero = bool(scene.get("hero"))
         safe = _escape(telop)
         wrapped = _telop_lines(safe, max_chars=11) if telop else ""
         highlighted = _highlight_numbers(wrapped) if wrapped else ""
         # Combined effect: quick fade-in + scale pop + settle.
-        # 100ms fade-in (down from 220) so climactic scenes don't waste time.
+        # Hero variant settles at 200% (2x) so a single-number telop like
+        # "1247日目" reads as the visual centerpiece of the slide.
+        settle_scale = 200 if is_hero else 100
+        pop_scale = settle_scale + 18
         effect = (
-            "{\\fad(100,140)"
-            "\\t(0,80,\\fscx118\\fscy118\\frz-2)"
-            "\\t(80,280,\\fscx100\\fscy100\\frz0)"
+            "{"
+            "\\fad(100,140)"
+            f"\\t(0,80,\\fscx{pop_scale}\\fscy{pop_scale}\\frz-2)"
+            f"\\t(80,280,\\fscx{settle_scale}\\fscy{settle_scale}\\frz0)"
             "}"
         )
         if telop:
@@ -268,24 +277,27 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 f"Dialogue: 2,{_ass_time(start)},{_ass_time(end)},Telop,,0,0,0,,"
                 f"{effect}{highlighted}"
             )
-        # Scene counter top-right.
-        events.append(
-            f"Dialogue: 1,{_ass_time(start)},{_ass_time(end)},Counter,,0,0,0,,"
-            f"{{\\fad(180,180)}}{i} / {total_scenes}"
-        )
 
     # 2. Subtitles per narration line - quick slide-up entry, with each
     #    subtitle held until the next one starts (or scene ends).
+    #    "／" in a narration line is treated as a forced line break
+    #    (passed through to the subtitle but stripped from TTS upstream).
     for s_i, scene in enumerate(scenes_with_timing):
         subs = scene.get("subtitles", [])
         for j, sub in enumerate(subs):
-            # End at the next subtitle start (or the scene's extended end).
             if j + 1 < len(subs):
                 end_time = subs[j + 1]["start"]
             else:
                 end_time = extended_ends[s_i]
             safe = _escape(sub["text"].strip().rstrip("。"))
-            wrapped = _wrap_lines(safe)
+            if "／" in safe:
+                # Honor the author's explicit break(s); each segment is
+                # wrapped independently to fit the safe width.
+                segments = [s.strip() for s in safe.split("／") if s.strip()]
+                wrapped_segments = [_wrap_lines(s) for s in segments]
+                wrapped = r"\N".join(wrapped_segments)
+            else:
+                wrapped = _wrap_lines(safe)
             highlighted = _highlight_numbers(wrapped)
             sub_effect = (
                 "{\\fad(140,180)"
@@ -298,14 +310,22 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 f"Subtitle,,0,0,0,,{sub_effect}{highlighted}"
             )
 
-    # 3. CTA card (last 4s) + animated "↑" arrow pointing to TikTok profile
+    # 3. CTA card (last 4s) + animated "↑" arrow pointing to TikTok profile.
+    # When the CTA contains "／" markers we honor them as explicit line
+    # breaks (each segment becomes its own centered line). Otherwise we fall
+    # back to char-count wrapping.
     if cta_text:
         cta_end = cta_offset_sec + 4.0
         safe_cta = _escape(cta_text)
-        wrapped_cta = _wrap_lines(safe_cta, max_chars=14)
+        if "／" in safe_cta:
+            segments = [s.strip() for s in safe_cta.split("／") if s.strip()]
+            wrapped_cta = r"\N".join(segments)
+        else:
+            # CTA font is 92pt: ~10 chars max per line.
+            wrapped_cta = _wrap_lines(safe_cta, max_chars=10)
         events.append(
             f"Dialogue: 5,{_ass_time(cta_offset_sec)},{_ass_time(cta_end)},"
-            f"CTA,,0,0,0,,{{\\fad(250,250)\\t(0,250,\\fscx112\\fscy112)"
+            f"CTA,,0,0,0,,{{\\fad(250,250)\\t(0,250,\\fscx108\\fscy108)"
             f"\\t(250,520,\\fscx100\\fscy100)}}{wrapped_cta}"
         )
         # Pulsing arrow drawing attention to the profile (top of screen).
@@ -317,22 +337,18 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             f"}}↑ プロフィールへ"
         )
 
-    # 4. Brand tag + episode badge (permanent, top-left, stacked).
+    # 4. Day-counter tag (permanent, top-left). Replaces the old
+    #    "卒業計画" brand wordmark — per reviewer, the authority signal
+    #    of "1247日目" is the strongest possible always-on element for
+    #    a Pachi-Sotsu account. Whatever the channel's current 卒業
+    #    day-count is, put it here.
     last_t = scenes_with_timing[-1]["end"] if scenes_with_timing else 0
     end_t = last_t + 5
+    counter_text = "卒業 1247日目"  # update via posts.json "day_counter" if needed
     events.append(
-        f"Dialogue: 0,{_ass_time(0)},{_ass_time(end_t)},Brand,,0,0,0,,"
-        f"{{\\fad(400,200)}}卒業計画"
+        f"Dialogue: 0,{_ass_time(0)},{_ass_time(end_t)},DayCounter,,0,0,0,,"
+        f"{{\\fad(400,200)}}{counter_text}"
     )
-    if episode and episode > 0:
-        # Render as "第N話 · <arc>" if arc supplied, else just "第N話".
-        label = f"第{episode}話"
-        if arc:
-            label += f" · {_escape(arc)}"
-        events.append(
-            f"Dialogue: 0,{_ass_time(0)},{_ass_time(end_t)},Episode,,0,0,0,,"
-            f"{{\\fad(500,200)}}{label}"
-        )
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(header + "\n".join(events) + "\n", encoding="utf-8")
